@@ -1,17 +1,50 @@
+# L'application est un outil puissant conçu pour faciliter la gestion des relevés bancaires de la banque "Umnia Bank".
+# Elle offre aux utilisateurs deux options principales dans son menu.
+
+# Option "Charger relevé bancaire PDF":
+# Cette option permet à l'utilisateur de sélectionner un relevé bancaire au format PDF émanant de la banque "Umnia Bank".
+# Une fois le fichier PDF chargé, l'application demande à l'utilisateur de spécifier l'année associée au relevé, car celle-ci n'est pas directement mentionnée dans le document.
+# En utilisant l'année fournie par l'utilisateur, l'application extrait les données suivantes du relevé :
+# Date (au format DD/MM/AA)
+# Mois (en toutes lettres)
+# Type de paiement
+# Nom du donneur d'ordre (si disponible)
+# Montant (en chiffres)
+# Montant (en lettres)
+# Numéro d'attestation unique pour chaque paiement
+# De plus, l'application offre des fonctionnalités supplémentaires telles que la possibilité de supprimer, modifier et ajouter des paiements.
+# Elle permet également d'éditer une seule attestation ou plusieurs attestations en fonction des paiements sélectionnés avant de cliquer sur le bouton "Attestation(s)".
+# Pour faciliter la gestion des données, l'application permet également de télécharger un fichier Excel au format CSV en cliquant sur le bouton "Télécharger CSV",
+# créant ainsi une copie des données chargées.
+
+# Option "Créer attestation":
+# Cette option permet à l'utilisateur de créer manuellement une attestation en fournissant les informations suivantes :
+# Date
+# Mois
+# Type de paiement
+# Montant (en chiffres)
+# Chiffre final du numéro d'attestation unique
+# En utilisant ces informations, l'application génère une attestation personnalisée.
+
+# En résumé, cette application offre une solution complète pour importer des relevés bancaires au format PDF, extraire automatiquement les données pertinentes,
+# effectuer des opérations de gestion sur ces données et générer des attestations personnalisées.
+# Elle facilite ainsi la gestion financière en automatisant les tâches fastidieuses et en fournissant des fonctionnalités pratiques pour la manipulation des données bancaires.*
+
+import sys
+import os
+import re
+from fpdf import FPDF
 from tkinter import messagebox
 import csv
 import xlsxwriter
 import tabula
 from numpy import NaN
 from PIL import ImageTk, Image
-import sys
-import os
 from tkPDFViewer import tkPDFViewer as pdf
 from tkinter import simpledialog, filedialog, ttk
 from tkinter import *
-from openpyxl import load_workbook
-from fpdf import FPDF
-
+import openpyxl
+import xlrd
 # ==========States=======
 mdp = [('')]
 année = 0
@@ -22,7 +55,13 @@ ope = 0
 bordercolor = 3
 bgcolor = 0
 v2 = ""
-filename = ''
+v4 = ""
+v6 = ""
+RBUmnia = ''
+RBAwb = ''
+RBCmi = ''
+selectionsRB = []
+safichargi = 0
 rje3 = 0
 deb = 0
 showpdf = 0
@@ -37,6 +76,11 @@ mytag = ''
 laDate = ''
 changerowcolo = 0
 télo = 0
+Organ = 5 
+NumAtt= 0 
+tableAWB=[]
+tableUmnia=[]
+tableCMI=[]
 bases = [("MILLIARD ", 1e9), ("MILLION ", 1e6), ("MILLE ", 1e3), ("CENT ", 1e2), ("QUATRE VINGT ", 80),
          ("SOIXANTE ", 60), ("CINQUANTE ", 50), ("QUARANTE ", 40), ("TRENTE ", 30), ("VINGT ", 20), ("DIX ", 10)]
 units = ["ZERO ", "UN ", "DEUX ", "TROIS ", "QUATRE ", "CINQ ", "SIX ", "SEPT ",
@@ -128,19 +172,25 @@ def acceuil():
     window.resizable(width=0, height=0)
     global rje3
     rje3 = 0
-    global filename
+    global RBUmnia
+    global RBAwb
+    global RBCmi
+    global selectionsRB
     global Dattta
     global télo
+    global safichargi
+    safichargi = 0
     télo = 0
+    selectionsRB = []
     Dattta = []
-    filename = ''
+    RBUmnia = ''
     page_frame.destroy()
 
     def secondaire():
-        zeroun='01'
+        zeroun = '01'
         topsec = Toplevel()
         topsec.title("Attestation de don")
-        topsec.geometry("500x350")
+        topsec.geometry("500x400")
         topsec.resizable(width=0, height=0)
         icon = PhotoImage(file='logo-light.png')
         window.tk.call('wm', 'iconphoto', topsec._w, icon)
@@ -148,17 +198,17 @@ def acceuil():
                     font=('Times', 11, 'bold'))
         e80 = Entry(
             topsec,  width=25)
-        l80.place(x=50, y=30)
-        e80.place(x=200, y=30)
+        l80.place(x=50, y=70)
+        e80.place(x=200, y=70)
         l89 = Label(topsec, text="Mois", width=20,
                     font=('Times', 11, 'bold'))
         e89 = Entry(
             topsec,  width=25)
-        l89.place(x=50, y=70)
-        e89.place(x=200, y=70)
+        l89.place(x=50, y=110)
+        e89.place(x=200, y=110)
         l81 = Label(topsec, text="Type", width=20,
                     font=('Times', 11, 'bold'))
-        
+
         options = [
             "VIREMENT PERMANENT",
             "VIREMENT",
@@ -166,56 +216,170 @@ def acceuil():
             "CARTE BANCAIRE",
             "espèces".upper(),
         ]
-        
+
         # datatype of menu text
         clicked = StringVar()
-        
+
         # initial menu text
-        clicked.set( "VIREMENT" )
-        
+        clicked.set("VIREMENT")
+
         # Create Dropdown menu
-        drop = OptionMenu( topsec , clicked , *options )
-        drop.place(x=200, y=105)
-        l81.place(x=50, y=110)
+        drop = OptionMenu(topsec, clicked, *options)
+        drop.place(x=200, y=145)
+        l81.place(x=50, y=150)
         l82 = Label(topsec, text="Nom donneur d'ordre",
                     width=20, font=('Times', 11, 'bold'))
         e82 = Entry(
             topsec, width=25)
-        l82.place(x=50, y=150)
-        e82.place(x=200, y=150)
+        l82.place(x=50, y=190)
+        e82.place(x=200, y=190)
         l83 = Label(topsec, text="Montant",
                     width=20, font=('Times', 11, 'bold'))
         e83 = Entry(
             topsec, width=25)
-        l83.place(x=50, y=190)
-        e83.place(x=200, y=190)
+        l83.place(x=50, y=230)
+        e83.place(x=200, y=230)
         l85 = Label(topsec, text="Montant en lettre",
                     width=20, font=('Times', 11, 'bold'))
         e85 = Entry(
             topsec,  width=25)
-        l85.place(x=50, y=230)
-        e85.place(x=200, y=230)
+        l85.place(x=50, y=270)
+        e85.place(x=200, y=270)
 
         l86 = Label(topsec, text="N° Attestation",
                     width=20, font=('Times', 11, 'bold'))
-        l87 = Label(topsec, text="D-AA-MM-'",
+        l87 = Label(topsec, text="D-AA-MM-",
                     width=20, font=('Times', 11, 'bold'))
         e86 = Entry(
             topsec, width=10)
-        l86.place(x=50, y=270)
-        l87.place(x=170, y=275)
-        e86.place(x=300, y=270)
+        l86.place(x=50, y=310)
+        l87.place(x=170, y=315)
+        e86.place(x=300, y=310)
         e80.focus()
         e89.configure(state="disabled")
         e85.configure(state="disabled")
 
         def idcode(e):
             global Dattta
-            l87.configure(
-                text='D-'+e80.get()[6: len(e80.get())]+'-'+e80.get()[3:5]+'-')
-            if e80.get() == '':
-                l87.configure(text='D-AA-MM-')
+            nonlocal options
+            if e == "C":
+                # Supprimez les options existantes du menu déroulant
+                drop['menu'].delete(0, 'end')
+                # Recréez le menu déroulant avec les options d'origine
+                for option in options:
+                    drop['menu'].add_command(label=option, command=lambda value=option: clicked.set(value))
+                # initial menu text
+                clicked.set("VIREMENT")
+
+                C.configure(
+                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                P.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                S.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                D.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                e82.configure(state="normal")
+            if e == "S":
+                # Supprimez les options existantes du menu déroulant
+                drop['menu'].delete(0, 'end')
+                # Recréez le menu déroulant avec les options d'origine
+                for option in options:
+                    drop['menu'].add_command(label=option, command=lambda value=option: clicked.set(value))
+                # initial menu text
+                clicked.set("VIREMENT")
+                S.configure(
+                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                P.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                C.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                D.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                e82.configure(state="normal")
+            if e == "D":
+                # Supprimez les options existantes du menu déroulant
+                drop['menu'].delete(0, 'end')
+                # Recréez le menu déroulant avec les options d'origine
+                for option in options:
+                    drop['menu'].add_command(label=option, command=lambda value=option: clicked.set(value))
+                # initial menu text
+                clicked.set("VIREMENT")
+                D.configure(
+                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                C.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                S.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                P.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                e82.configure(state="normal")
+            if e == "P":
+                clicked.set("")
+                drop['menu'].delete(0, 'end')
+                P.configure(
+                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                C.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                S.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                D.configure(
+                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                e82.configure(state="disabled")
+            if D.cget('bg') == 'blue' and C.cget('bg') == 'blue' and P.cget('bg') == 'blue' and S.cget('bg') == 'blue':
+                l87.configure(
+                    text='D-'+e80.get()[6: len(e80.get())]+'-'+e80.get()[3:5]+'-')
+                topsec.title("Attestation de Don")
+                if e80.get() == '':
+                    l87.configure(text='D-AA-MM-')
+            if D.cget('bg') == 'green':
+                l87.configure(
+                    text='D-'+e80.get()[6: len(e80.get())]+'-'+e80.get()[3:5]+'-')
+                topsec.title("Attestation de Don")
+                if e80.get() == '':
+                    l87.configure(text='D-AA-MM-')
+            if C.cget('bg') == 'green':
+                l87.configure(
+                    text='C-'+e80.get()[6: len(e80.get())]+'-'+e80.get()[3:5]+'-')
+                topsec.title("Attestation de Cotisation")
+                if e80.get() == '':
+                    l87.configure(text='C-AA-MM-')
+            if P.cget('bg') == 'green':
+                l87.configure(
+                    text='P-'+e80.get()[6: len(e80.get())]+'-'+e80.get()[3:5]+'-')
+                topsec.title("Attestation de Don en nature")
+                if e80.get() == '':
+                    l87.configure(text='P-AA-MM-')
+            if S.cget('bg') == 'green':
+                l87.configure(
+                    text='S-'+e80.get()[6: len(e80.get())]+'-'+e80.get()[3:5]+'-')
+                topsec.title("Attestation de Sponsoring")
+                if e80.get() == '':
+                    l87.configure(text='S-AA-MM-')
+
+        D = Button(
+            topsec, text='D', command=lambda: idcode("D"))
+        D.configure(
+            font=('Times', 11, 'bold'), bg='blue', fg='white')
+        D.place(x=200, y=20)
+        S = Button(
+            topsec, text='S', command=lambda: idcode("S"))
+        S.configure(
+            font=('Times', 11, 'bold'), bg='blue', fg='white')
+        S.place(x=230, y=20)
+        P = Button(
+            topsec, text='P', command=lambda: idcode("P"))
+        P.configure(
+            font=('Times', 11, 'bold'), bg='blue', fg='white')
+        P.place(x=260, y=20)
+        C = Button(
+            topsec, text='C', command=lambda: idcode("C"))
+        C.configure(
+            font=('Times', 11, 'bold'), bg='blue', fg='white')
+        C.place(x=290, y=20)
+
         e80.bind("<KeyRelease>", idcode)
+
         def hantaTchouf():
             e80.delete(0, END)
             e82.delete(0, END)
@@ -225,49 +389,59 @@ def acceuil():
             topsec.destroy()
 
         def attsec():
-            attoto=0
+            attoto = 0
+
             Fait_le = e80.get().upper()
-            heywdi=e86.get().upper()
-            if heywdi=='1' or heywdi=='':
-                heywdi='01'
-            if heywdi=='2':
-                heywdi='02'
-            if heywdi=='3':
-                heywdi='03'
-            if heywdi=='4':
-                heywdi='04'
-            if heywdi=='5':
-                heywdi='05'
-            if heywdi=='6':
-                heywdi='06'
-            if heywdi=='7':
-                heywdi='07'
-            if heywdi=='8':
-                heywdi='08'
-            if heywdi=='9':
-                heywdi='09'
-            D_22_09_10 = "D"+"-"+Fait_le[3:5]+"-"+Fait_le[6:len(Fait_le)]+"-"+heywdi
+            heywdi = e86.get().upper()
+            if heywdi == '1' or heywdi == '':
+                heywdi = '01'
+            if heywdi == '2':
+                heywdi = '02'
+            if heywdi == '3':
+                heywdi = '03'
+            if heywdi == '4':
+                heywdi = '04'
+            if heywdi == '5':
+                heywdi = '05'
+            if heywdi == '6':
+                heywdi = '06'
+            if heywdi == '7':
+                heywdi = '07'
+            if heywdi == '8':
+                heywdi = '08'
+            if heywdi == '9':
+                heywdi = '09'
+            
+            D_22_09_10 = l87.cget("text")+heywdi
             Montant = e83.get().upper()
             Montant_en_lettre = e85.get().upper()
             Nom = e82.get().upper()
             Type = clicked.get().upper()
-            mois=''
-            kok=0
-            if os.path.exists(str(D_22_09_10)+".pdf"): 
-                attoto=1
+            mois = ''
+            kok = 0
+
+            # Créer le nom du dossier basé sur le nom du fichier Excel
+            nom_dossier = os.path.splitext(e80.get()[6: len(e80.get())]+'-'+e80.get()[3:5])[0]
+
+            # Créer le dossier s'il n'existe pas déjà
+            if not os.path.exists(nom_dossier):
+                os.makedirs(nom_dossier)
+            if os.path.exists(nom_dossier+"/"+str(D_22_09_10)+".pdf"):
+                attoto = 1
+
             def chiftolett(value, skip=-1):
                 if int(value) < len(units) and units[int(value)]:
                     return [] if int(value) <= skip else [units[int(value)]]
                 for name, v in bases:
                     if int(value) >= v:
                         return chiftolett(int(int(value)/v), 1 if v <= 1000 else -1) + [name] + chiftolett(int(int(value) % v), 0)
-            
+
             if Montant == '' or Fait_le == '':
                 messagebox.showinfo(
                     title='Erreur !!', message="la date et le montant sont obligatoire.", parent=topsec)
                 ope = 0
                 return
-            
+
             if Montant.count(',') == 1:
                 if len(Montant)-Montant.index(',') != 3:
                     messagebox.showinfo(
@@ -293,38 +467,38 @@ def acceuil():
                         if po == "01" or po == "02" or po == "03" or po == "04" or po == "05" or po == "06" or po == "07" or po == "08" or po == "09":
                             Montant_en_lettre += "ZERO "
                         Montant_en_lettre += "".join(chiftolett(int(po)))
-                x=''
-                Montant=Montant.replace('.','')
-                if len(Montant)>4 :
-                    bima=Montant[len(Montant)-3: len(Montant)]
-                    Montant=Montant[0:len(Montant)-3]
-                    for i in range(len(Montant)-1,-1,-1) : 
-                        if kok==3 or kok==6 or kok==9 or kok==12 or kok==15 or kok==18 or kok==21:
-                            x=x+'.'
-                            x= x+Montant[i]
-                        else : 
-                            x= x+Montant[i]
-                        kok=kok+1
-                if kok!=0 : 
-                    Montant=''
-                    for i in range(len(x)-1,-1,-1):
-                        Montant=Montant+x[i]
-                    Montant=Montant+bima
+                x = ''
+                Montant = Montant.replace('.', '')
+                if len(Montant) > 4:
+                    bima = Montant[len(Montant)-3: len(Montant)]
+                    Montant = Montant[0:len(Montant)-3]
+                    for i in range(len(Montant)-1, -1, -1):
+                        if kok == 3 or kok == 6 or kok == 9 or kok == 12 or kok == 15 or kok == 18 or kok == 21:
+                            x = x+'.'
+                            x = x+Montant[i]
+                        else:
+                            x = x+Montant[i]
+                        kok = kok+1
+                if kok != 0:
+                    Montant = ''
+                    for i in range(len(x)-1, -1, -1):
+                        Montant = Montant+x[i]
+                    Montant = Montant+bima
             else:
-                x=''
-                Montant=Montant.replace('.','')
-                if len(Montant)>4 :
-                    for i in range(len(Montant)-1,-1,-1) : 
-                        if kok==3 or kok==6 or kok==9 or kok==12 or kok==15 or kok==18 or kok==21:
-                            x=x+'.'
-                            x= x+Montant[i]
-                        else : 
-                            x= x+Montant[i]
-                        kok=kok+1
-                if kok!=0 : 
-                    Montant=''
-                    for i in range(len(x)-1,-1,-1):
-                        Montant=Montant+x[i]
+                x = ''
+                Montant = Montant.replace('.', '')
+                if len(Montant) > 4:
+                    for i in range(len(Montant)-1, -1, -1):
+                        if kok == 3 or kok == 6 or kok == 9 or kok == 12 or kok == 15 or kok == 18 or kok == 21:
+                            x = x+'.'
+                            x = x+Montant[i]
+                        else:
+                            x = x+Montant[i]
+                        kok = kok+1
+                if kok != 0:
+                    Montant = ''
+                    for i in range(len(x)-1, -1, -1):
+                        Montant = Montant+x[i]
                 for i in Montant:
                     if i == '.':
                         pass
@@ -376,114 +550,567 @@ def acceuil():
             pdf = FPDF(orientation='P', format='A4')
             pdf.add_page()
 
-            pdf.set_xy(90,65)
-            pdf.set_font("times",size=21,style='BU')
-            pdf.cell(txt='Attestation de Don',w=30,align='C')
-            pdf.image('logo-att.png',80, 10,w = 50,h=40)
-            pdf.set_xy(91.5,75)
-            pdf.cell(txt=D_22_09_10,w=28,align='C')
+            if D_22_09_10[0] == "D":
+                hantaTchouf()
+                pdf.set_xy(90, 65)
+                pdf.set_font("times", size=21, style='BU')
+                pdf.cell(txt='Attestation de Don',
+                            w=30, align='C')
+                pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                pdf.set_xy(91.5, 75)
+                pdf.cell(txt=D_22_09_10, w=28, align='C')
+                text1 = "Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
+                text2 = Montant + \
+                    " dirhams ("+Montant_en_lettre+" dirhams)"
+                if Type.lower() == "espèce" or Type.lower() == "espece":
+                    text3 = " en "
+                else:
+                    text3 = " par "
+                text4 = Type+" "
+                text5 = "de "
+                text6 = Nom+"."
+                text7 = "La contribution de "
+                text8 = Nom+" "
+                text9 = "participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
+                text10 = Nom+" "
+                text11 = "peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
+                text12 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
 
-            text1="Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
-            text2=Montant+" dirhams ( "+Montant_en_lettre+"dirhams )"
-            if Type.lower()=="espèce" or Type.lower()=="espece":
-                Type="espèce".upper()
-                text3=" en "
-            else:
-                text3=" par "
-            text4=Type.upper()+" "
-            text5="de "
-            text6=Nom.upper()+"."
-            text7="La contribution de "
-            text8=Nom+" "
-            text9="participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
-            text10=Nom.upper()+" "
-            text11="peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
-            text12="Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
-            text13="Cette attestation est délivrée pour servir et valoir ce que de droit."
+                text14 = "Fait à Casablanca, le "
+                text15 = Fait_le[0:2]+" "+mois + \
+                    " "+"20"+Fait_le[6:len(Fait_le)]
 
-            text14="Fait à Casablanca, le "
-            text15=Fait_le[0:2]+" "+mois+" "+"20"+Fait_le[6:len(Fait_le)]
-            text16="Bouchra OUTAGHANI"
+                text16 = "Bouchra OUTAGHANI"
 
-            pdf.set_auto_page_break("ON", margin = 0.0)
-            pdf.set_font("times",size=12)
-            pdf.set_xy(20,105)
-            pdf.multi_cell(w=170,h=5,txt=text1+"**"+text2+"**"+text3+"**"+text4+"**"+text5+"**"+text6+"**"+"\n\n"+text7+"**"+text8+"**"+text9+"\n\n"+"**"+text10+"**"+text11+"\n\n"+text12+"\n\n"+text13,markdown=True,
-                            align='L')
+                pdf.set_auto_page_break("ON", margin=0.0)
+                pdf.set_font("times", size=12)
+                pdf.set_xy(20, 105)
+                pdf.multi_cell(w=170, h=5, txt=text1+"**"+text2+"**"+text3+"**"+text4+"**"+text5+"**"+text6+"**"+"\n\n"+text7+"**"+text8+"**"+text9+"\n\n"+"**"+text10+"**"+text11+"\n\n"+text12+"\n\n"+text13, markdown=True,
+                                align='L')
 
-            pdf.set_font("times",size=11)
-            pdf.set_xy(100,200)
-            pdf.multi_cell(w=90,h=5,txt=text14+"**"+text15+"**"+"\n\n"+"**"+text16+"**",markdown=True,align='R')
-            pdf.set_xy(100,215)
-            pdf.multi_cell(w=90,h=5,txt="**Trésorière Générale**",markdown=True,align='R')
-            pdf.set_font("times",size=9)
-            pdf.set_xy(100,220)
-            pdf.multi_cell(w=90,h=5,txt="**P.O**",markdown=True,align='R')
-            pdf.set_xy(100,225)
-            pdf.multi_cell(w=90,h=5,txt="**Bochra CHABBOUBA ELIDRISSI**",markdown=True,align='R')
-            pdf.set_xy(100,230)
-            pdf.multi_cell(w=90,h=5,txt="**Responsable Administrative et Financière**",markdown=True,align='R')
+                pdf.set_font("times", size=11)
+                pdf.set_xy(100, 200)
+                pdf.multi_cell(w=90, h=5, txt=text14+"**"+text15+"**" +
+                                "\n\n"+"**"+text16+"**", markdown=True, align='R')
+                pdf.set_xy(100, 215)
+                pdf.multi_cell(
+                    w=90, h=5, txt="**Trésorière Générale**", markdown=True, align='R')
+                pdf.set_font("times", size=9)
+                pdf.set_xy(100, 220)
+                pdf.multi_cell(w=90, h=5, txt="**P.O**",
+                                markdown=True, align='R')
+                pdf.set_xy(100, 225)
+                pdf.multi_cell(
+                    w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                pdf.set_xy(100, 230)
+                pdf.multi_cell(
+                    w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
+
+                pdf.set_fill_color(193, 153, 9)
+                pdf.set_xy(8, 275)
+                pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
+
+                pdf.set_text_color(45, 82, 158)
+                pdf.set_font("times", size=14, style="B")
+                pdf.set_xy(8, 280)
+                pdf.multi_cell(
+                    w=0, h=5, txt="JADARA Foundation")
+
+                pdf.set_text_color(193, 153, 9)
+                pdf.set_font("times", size=7.5, style="")
+                pdf.set_xy(8, 285)
+                pdf.multi_cell(
+                    w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                pdf.set_text_color(0, 0, 0)
+                pdf.set_font("times", size=7.5, style="")
+                pdf.set_xy(8, 289)
+                pdf.multi_cell(
+                    w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                pdf.set_font("times", size=8, style="")
+                pdf.set_xy(107, 279)
+                pdf.multi_cell(
+                    w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                pdf.set_font("times", size=8, style="")
+                pdf.set_xy(158, 283)
+                pdf.multi_cell(
+                    w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                pdf.set_xy(152, 275)
+                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                pdf.set_xy(102, 275)
+                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                nom_fichier_pdf = os.path.join(
+                    nom_dossier, str(D_22_09_10) + ".pdf")
+
+                pdf.output(nom_fichier_pdf)
+            if D_22_09_10[0] == "S":
+                hantaTchouf()
+                def swbatts() : 
+                    pdf.set_xy(90, 65)
+                    pdf.set_font("times", size=21, style='BU')
+                    pdf.cell(txt='Attestation de Don',
+                            w=30, align='C')
+                    pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                    pdf.set_xy(91.5, 75)
+                    pdf.cell(txt=D_22_09_10, w=28, align='C')
+                    nameevent = e808.get()
+                    text1 = "Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
+                    text2 = "**"+Montant + \
+                        " dirhams ("+Montant_en_lettre+" dirhams)"+"**"
+                    if Type.lower() == "espèce" or Type.lower() == "espece":
+                        text3 = " en "
+                    else:
+                        text3 = " par "
+                    text4 = "**"+Type+" "+"**"
+                    text5 = "de"
+                    text6 = "**"+" "+Nom+"**"+"."
+                    text7 = "La contribution de "
+                    text8 = "**"+Nom+" "+"**"
+                    text9 = "participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
+                    textX = "Cette contribution participera au financement de l'évènement :"
+                    textY = "**"+" "+nameevent+"**"
+                    text10 = "**"+" "+Nom+" "+"**"
+                    text11 = "peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
+                    text12 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                    text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
+
+                    text14 = "Fait à Casablanca, le "
+                    text15 = Fait_le[0:2]+" "+mois + \
+                        " "+"20"+Fait_le[6:len(Fait_le)]
+
+                    text16 = "Bouchra OUTAGHANI"
+
+                    pdf.set_auto_page_break("ON", margin=0.0)
+                    pdf.set_font("times", size=12)
+                    pdf.set_xy(20, 105)
+                    pdf.multi_cell(w=170, h=5, txt=text1+text2+text3+text4+text5+text6+"\n\n"+text7+text8+text9+"\n\n"+textX+textY+"\n\n"+text10+text11+"\n\n"+text12+"\n\n"+text13, markdown=True,
+                                align='L')
+
+                    pdf.set_font("times", size=11)
+                    pdf.set_xy(100, 200)
+                    pdf.multi_cell(w=90, h=5, txt=text14+"**"+text15+"**" +
+                                "\n\n"+"**"+text16+"**", markdown=True, align='R')
+                    pdf.set_xy(100, 215)
+                    pdf.multi_cell(
+                        w=90, h=5, txt="**Trésorière Générale**", markdown=True, align='R')
+                    pdf.set_font("times", size=9)
+                    pdf.set_xy(100, 220)
+                    pdf.multi_cell(w=90, h=5, txt="**P.O**",
+                                markdown=True, align='R')
+                    pdf.set_xy(100, 225)
+                    pdf.multi_cell(
+                        w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                    pdf.set_xy(100, 230)
+                    pdf.multi_cell(
+                        w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
+
+                    pdf.set_fill_color(193, 153, 9)
+                    pdf.set_xy(8, 275)
+                    pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
+
+                    pdf.set_text_color(45, 82, 158)
+                    pdf.set_font("times", size=14, style="B")
+                    pdf.set_xy(8, 280)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="JADARA Foundation")
+
+                    pdf.set_text_color(193, 153, 9)
+                    pdf.set_font("times", size=7.5, style="")
+                    pdf.set_xy(8, 285)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("times", size=7.5, style="")
+                    pdf.set_xy(8, 289)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                    pdf.set_font("times", size=8, style="")
+                    pdf.set_xy(107, 279)
+                    pdf.multi_cell(
+                        w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                    pdf.set_font("times", size=8, style="")
+                    pdf.set_xy(158, 283)
+                    pdf.multi_cell(
+                        w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                    pdf.set_xy(152, 275)
+                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                    pdf.set_xy(102, 275)
+                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                    e808.delete(0, END)
+                    topatts.destroy()
+
+                    nom_fichier_pdf = os.path.join(
+                        nom_dossier, str(D_22_09_10) + ".pdf")
+
+                    pdf.output(nom_fichier_pdf)
+                topatts = Toplevel()
+                topatts.title(D_22_09_10)
+                topatts.geometry("500x200")
+                topatts.resizable(width=0, height=0)
+                icon = PhotoImage(file='logo-light.png')
+                window.tk.call('wm', 'iconphoto', topatts._w, icon)
+                l800 = Label(topatts, text=Type+" ("+Montant+" DH) de "+Nom,
+                            font=('Times', 11, 'bold'))
+                l800.place(x=50, y=25)
+                l808 = Label(topatts, text="Cette contribution participera au financement de l'évènement :",
+                            font=('Times', 11, 'bold'))
+                e808 = Entry(
+                    topatts,  width=25)
+                l808.place(x=50, y=72)
+                e808.place(x=150, y=95)
+                def hantaTchoufatts():
+                    nonlocal attoto
+                    attoto = 2
+                    e808.delete(0, END)
+                    topatts.destroy()
+                submitbuttonatts = Button(
+                    topatts, text='Enregistrer', command=lambda: swbatts())
+                submitbuttonatts.configure(
+                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                submitbuttonatts.place(x=250, y=150)
+                cancelbuttonatts = Button(
+                    topatts, text='Annulé', command=lambda: hantaTchoufatts())
+                cancelbuttonatts.configure(
+                    font=('Times', 11, 'bold'), bg='red', fg='white')
+                cancelbuttonatts.place(x=150, y=150)
+                topatts.protocol(
+                    "WM_DELETE_WINDOW", hantaTchoufatts)
+                topatts.bind(
+                    "<Return>", lambda e: swbatts())
+                topatts.bind(
+                    "<Escape>", lambda e: hantaTchoufatts())
+                topatts.wait_window()
+            if D_22_09_10[0] == "P":
+                hantaTchouf()
+                def swbattp():
+                    pdf.set_xy(90, 65)
+                    pdf.set_font("times", size=21, style='BU')
+                    pdf.cell(txt='Attestation de Don en nature',
+                            w=30, align='C')
+                    pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                    pdf.set_xy(91.5, 75)
+                    pdf.cell(txt=D_22_09_10+"-"+e802.get()+"DN", w=30, align='C')
+                    text10 = "Je soussignée, Mme Bochra CHABBOUBA ELIDRISSI, Responsable Administrative et Financière de JADARA FOUBDATION, atteste par la présente que l'association a bénéficié au titre de l'année scolaire"
+                    text11 = "**"+" "+e801.get()+"**"
+                    text12 = " d'un don en nature de la part de :"
+                    text13 = "**"+" "+e808.get()+"**"
+                    text14 = "Ce don est sous forme d'une place pédagogique gracieusement offerte au profit du boursier inscrit régulièrement au titre de l'année universitaire"
+                    text15 = "**"+"Nom : "+e803.get()+"**"
+                    text16 = "**"+"CIN : "+e804.get()+"**"
+                    text17 = "**"+"Etudiant en : "+e805.get()+"**"
+                    text18 = "Ce don est valorisé dans les livres comptables de notre association au titre de l'exercice"+"**"+" "+e802.get()+"**"
+                    text19 ="**"+ Montant + \
+                        " dirhams ("+Montant_en_lettre+" dirhams)."+"**"
+                    text199="Cette contribution participe au financement de la mission de JADARA FOUNDATION dont l'objet est de financer des bourses d'études supérieures pour les bacheliers méritants issus de milieux défavorisés."
+                    text20 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                    text21 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
+
+                    text22 = "Fait à Casablanca, le "
+                    text23 = Fait_le[0:2]+" "+mois + \
+                        " "+"20"+Fait_le[6:len(Fait_le)]
 
 
+                    pdf.set_auto_page_break("ON", margin=0.0)
+                    pdf.set_font("times", size=12)
+                    pdf.set_xy(20, 100)
+                    pdf.multi_cell(w=170, h=5, txt=text10+text11+text12+"\n\n"+"                                               "+text13+"\n\n"+text14+text11+" :"+"\n\n"+"       "+text15+"\n\n"+"       "+text16+"\n\n"+"       "+text17+"\n\n"+text18+" à hauteur de "+text19+"\n\n"+text199+"\n\n"+text20+"\n\n"+text21, markdown=True,
+                                align='L')
 
-            pdf.set_fill_color(193, 153, 9)
-            pdf.set_xy(8,275)
-            pdf.multi_cell(w=0,h=0.5,txt="",fill=True)
+                    pdf.set_font("times", size=11)
+                    pdf.set_xy(100, 240)
+                    pdf.multi_cell(w=90, h=5, txt=text22+"**"+text23+"**", markdown=True, align='R')
+                    pdf.set_xy(100, 250)
+                    pdf.multi_cell(
+                        w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                    pdf.set_xy(100, 255)
+                    pdf.multi_cell(
+                        w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
 
-            pdf.set_text_color(45, 82, 158)
-            pdf.set_font("times",size=14,style="B")
-            pdf.set_xy(8,280)
-            pdf.multi_cell(w=0,h=5,txt="JADARA Foundation")
+                    pdf.set_fill_color(193, 153, 9)
+                    pdf.set_xy(8, 275)
+                    pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
 
-            pdf.set_text_color(193, 153, 9)
-            pdf.set_font("times",size=7.5,style="")
-            pdf.set_xy(8,285)
-            pdf.multi_cell(w=0,h=5,txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+                    pdf.set_text_color(45, 82, 158)
+                    pdf.set_font("times", size=14, style="B")
+                    pdf.set_xy(8, 280)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="JADARA Foundation")
 
-            pdf.set_text_color(0, 0, 0)
-            pdf.set_font("times",size=7.5,style="")
-            pdf.set_xy(8,289)
-            pdf.multi_cell(w=0,h=5,txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca",markdown=True)
+                    pdf.set_text_color(193, 153, 9)
+                    pdf.set_font("times", size=7.5, style="")
+                    pdf.set_xy(8, 285)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
 
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("times", size=7.5, style="")
+                    pdf.set_xy(8, 289)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
 
-            pdf.set_font("times",size=8,style="")
-            pdf.set_xy(107,279)     
-            pdf.multi_cell(w=40,h=5,txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation",markdown=True)
+                    pdf.set_font("times", size=8, style="")
+                    pdf.set_xy(107, 279)
+                    pdf.multi_cell(
+                        w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
 
-            pdf.set_font("times",size=8,style="")
-            pdf.set_xy(158,283)     
-            pdf.multi_cell(w=40,h=5,txt="**www.jadara.foundation**",markdown=True)
+                    pdf.set_font("times", size=8, style="")
+                    pdf.set_xy(158, 283)
+                    pdf.multi_cell(
+                        w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
 
+                    pdf.set_xy(152, 275)
+                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
 
-            pdf.set_xy(152,275)
-            pdf.multi_cell(w=0.5,h=20,txt="",fill=True)
+                    pdf.set_xy(102, 275)
+                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
 
+                    e808.delete(0, END)
+                    e801.delete(0, END)
+                    e802.delete(0, END)
+                    e803.delete(0, END)
+                    e804.delete(0, END)
+                    e805.delete(0, END)
+                    topattp.destroy()
 
-            pdf.set_xy(102,275)
-            pdf.multi_cell(w=0.5,h=20,txt="",fill=True)
+                    nom_fichier_pdf = os.path.join(
+                        nom_dossier, str(D_22_09_10) + ".pdf")
+                    pdf.output(nom_fichier_pdf)
+                topattp = Toplevel()
+                topattp.title(D_22_09_10)
+                topattp.geometry("500x360")
+                topattp.resizable(width=0, height=0)
+                icon = PhotoImage(file='logo-light.png')
+                window.tk.call('wm', 'iconphoto', topattp._w, icon)
+                l800 = Label(topattp, text=Type+" ("+Montant+" DH) de "+Nom,
+                            font=('Times', 11, 'bold'))
+                l800.place(x=50, y=25)
+                l808 = Label(topattp, text="De la part de : ",
+                            font=('Times', 11, 'bold'))
+                e808 = Entry(
+                    topattp,  width=25)
+                l808.place(x=50, y=72)
+                e808.place(x=200, y=70)
+                l802 = Label(topattp, text="Exercice : ",
+                            font=('Times', 11, 'bold'))
+                e802 = Entry(
+                    topattp,  width=25)
+                l802.place(x=50, y=112)
+                e802.place(x=200, y=110)
+                l801 = Label(topattp, text="Année scolaire : ",
+                            font=('Times', 11, 'bold'))
+                e801 = Entry(
+                    topattp,  width=25)
+                l801.place(x=50, y=152)
+                e801.place(x=200, y=150)
+                l803 = Label(topattp, text="Nom étudiant : ",
+                            font=('Times', 11, 'bold'))
+                e803 = Entry(
+                    topattp,  width=25)
+                l803.place(x=50, y=192)
+                e803.place(x=200, y=190)
+                l804 = Label(topattp, text="CIN étudiant : ",
+                            font=('Times', 11, 'bold'))
+                e804 = Entry(
+                    topattp,  width=25)
+                l804.place(x=50, y=232)
+                e804.place(x=200, y=230)
+                l805 = Label(topattp, text="Etudiant en : ",
+                            font=('Times', 11, 'bold'))
+                e805 = Entry(
+                    topattp,  width=25)
+                l805.place(x=50, y=272)
+                e805.place(x=200, y=270)
+                def hantaTchoufattp():
+                    nonlocal attoto
+                    attoto = 2
+                    e808.delete(0, END)
+                    e801.delete(0, END)
+                    e802.delete(0, END)
+                    e803.delete(0, END)
+                    e804.delete(0, END)
+                    e805.delete(0, END)
+                    topattp.destroy()
+                submitbuttonattp = Button(
+                    topattp, text='Enregistrer', command=lambda: swbattp())
+                submitbuttonattp.configure(
+                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                submitbuttonattp.place(x=300, y=320)
+                cancelbuttonattp = Button(
+                    topattp, text='Annulé', command=lambda: hantaTchoufattp())
+                cancelbuttonattp.configure(
+                    font=('Times', 11, 'bold'), bg='red', fg='white')
+                cancelbuttonattp.place(x=200, y=320)
+                topattp.protocol(
+                    "WM_DELETE_WINDOW", hantaTchoufattp)
+                topattp.bind(
+                    "<Return>", lambda e: swbattp())
+                topattp.bind(
+                    "<Escape>", lambda e: hantaTchoufattp())
+                topattp.wait_window()
+            if D_22_09_10[0] == "C":
+                hantaTchouf()
+                def swbattc() : 
+                    pdf.set_xy(90, 65)
+                    pdf.set_font("times", size=21, style='BU')
+                    pdf.cell(txt='Attestation de Cotisation',
+                            w=30, align='C')
+                    pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                    pdf.set_xy(91.5, 75)
+                    pdf.cell(txt=D_22_09_10, w=28, align='C')
+                    text1 = "Nous, JADARA FOUNDATION, attestons par la présente avoir reçu la somme de "
+                    text2 = "**"+Montant + \
+                        " dirhams ("+Montant_en_lettre+" dirhams) "+"**"
+                    text5 = "de "
+                    text6 ="**"+Nom+" "+"**"
+                    text7 = labelc.cget('text')
+                    text8 = "**"+" "+e908.get()+"**"+"."
+                    text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
 
+                    text22 = "Fait à Casablanca, le "
+                    text23 = Fait_le[0:2]+" "+mois + \
+                        " "+"20"+Fait_le[6:len(Fait_le)]
 
+                    pdf.set_auto_page_break("ON", margin=0.0)
+                    pdf.set_font("times", size=13)
+                    pdf.set_xy(20, 120)
+                    pdf.multi_cell(w=170, h=5, txt=text1+text2+text5+text6+text7+text8+"\n\n"+text13, markdown=True,
+                                align='L')
+                    pdf.set_font("times", size=11)
+                    pdf.set_xy(100, 200)
+                    pdf.multi_cell(w=90, h=5, txt=text22+"**"+text23+"**", markdown=True, align='R')
+                    pdf.set_xy(100, 210)
+                    pdf.multi_cell(
+                        w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                    pdf.set_xy(100, 215)
+                    pdf.multi_cell(
+                        w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
 
+                    pdf.set_fill_color(193, 153, 9)
+                    pdf.set_xy(8, 275)
+                    pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
 
-            pdf.output(str(D_22_09_10)+".pdf")
-            if attoto==0:
+                    pdf.set_text_color(45, 82, 158)
+                    pdf.set_font("times", size=14, style="B")
+                    pdf.set_xy(8, 280)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="JADARA Foundation")
+
+                    pdf.set_text_color(193, 153, 9)
+                    pdf.set_font("times", size=7.5, style="")
+                    pdf.set_xy(8, 285)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("times", size=7.5, style="")
+                    pdf.set_xy(8, 289)
+                    pdf.multi_cell(
+                        w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                    pdf.set_font("times", size=8, style="")
+                    pdf.set_xy(107, 279)
+                    pdf.multi_cell(
+                        w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                    pdf.set_font("times", size=8, style="")
+                    pdf.set_xy(158, 283)
+                    pdf.multi_cell(
+                        w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                    pdf.set_xy(152, 275)
+                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                    pdf.set_xy(102, 275)
+                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+                    
+                    e908.delete(0, END)
+                    topattc.destroy()
+                    nom_fichier_pdf = os.path.join(
+                        nom_dossier, str(D_22_09_10) + ".pdf")
+
+                    pdf.output(nom_fichier_pdf)
+
+                topattc = Toplevel()
+                topattc.title(D_22_09_10)
+                topattc.geometry("500x220")
+                topattc.resizable(width=0, height=0)
+                icon = PhotoImage(file='logo-light.png')
+                window.tk.call('wm', 'iconphoto', topattc._w, icon)
+                l900 = Label(topattc, text=Type+" ("+Montant+" DH) de "+Nom,
+                            font=('Times', 11, 'bold'))
+                l900.place(x=50, y=25)
+                def update_label():
+                    if var.get() == 1:
+                        labelc.config(text="en tant que membre de l'association au titre de l'année")
+                    else:
+                        labelc.config(text="en tant que membre de l'association au titre des années :")
+
+                var = IntVar()
+                var.set(1)  # Coche le premier checkbutton par défaut
+
+                checkbuttonc1 = Checkbutton(topattc, text="Une année", variable=var, onvalue=1, offvalue=0, command=update_label)
+                checkbuttonc1.place(x=90, y=60)
+
+                checkbuttonc2 = Checkbutton(topattc, text="Plusieurs années", variable=var, onvalue=0, offvalue=1, command=update_label)
+                checkbuttonc2.place(x=240, y=60)
+
+                labelc = Label(topattc, text="en tant que membre de l'association au titre de l'année")
+                labelc.place(x=50, y=90)
+
+                e908 = Entry(topattc, width=25)
+                e908.pack()
+                e908.place(x=150, y=120)
+                def hantaTchoufattc():
+                    nonlocal attoto
+                    attoto = 2
+                    e908.delete(0, END)
+                    topattc.destroy()
+                submitbuttonattc = Button(
+                    topattc, text='Enregistrer', command=lambda: swbattc())
+                submitbuttonattc.configure(
+                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                submitbuttonattc.place(x=250, y=170)
+                cancelbuttonattc = Button(
+                    topattc, text='Annulé', command=lambda: hantaTchoufattc())
+                cancelbuttonattc.configure(
+                    font=('Times', 11, 'bold'), bg='red', fg='white')
+                cancelbuttonattc.place(x=150, y=170)
+                topattc.protocol(
+                    "WM_DELETE_WINDOW", hantaTchoufattc)
+                topattc.bind(
+                    "<Return>", lambda e: swbattc())
+                topattc.bind(
+                    "<Escape>", lambda e: hantaTchoufattc())
+                topattc.wait_window()
+            if attoto == 0:
                 messagebox.showinfo(
-                    title='', message="Fichier "+str(D_22_09_10)+".pdf créé. ", parent=topsec)
-            else : 
+                    title='', message="Fichier "+str(D_22_09_10)+".pdf créé. ", parent=window)
+            elif attoto == 1:
                 messagebox.showinfo(
-                    title='', message="Fichier "+str(D_22_09_10)+".pdf mis à jour. ", parent=topsec)
-            hantaTchouf()
+                    title='', message="Fichier "+str(D_22_09_10)+".pdf mis à jour. ", parent=window)
 
         submitbutton = Button(
             topsec, text='Enregistrer', command=lambda: attsec())
         submitbutton.configure(
             font=('Times', 11, 'bold'), bg='green', fg='white')
-        submitbutton.place(x=300, y=310)
+        submitbutton.place(x=300, y=350)
         cancelbutton = Button(
             topsec, text='Annulé', command=lambda: hantaTchouf())
         cancelbutton.configure(
             font=('Times', 11, 'bold'), bg='red', fg='white')
-        cancelbutton.place(x=200, y=310)
+        cancelbutton.place(x=200, y=350)
         topsec.protocol(
             "WM_DELETE_WINDOW", hantaTchouf)
         topsec.bind(
@@ -496,9 +1123,13 @@ def acceuil():
         global rje3
         global v2
         global v1
-        global filename
+        global RBUmnia
+        global RBAwb
+        global RBCmi
+        global selectionsRB
         global bordercolor
         global bgcolor
+        global safichargi
         rje3 = 1
         b.place_forget()
         a.place_forget()
@@ -777,41 +1408,118 @@ def acceuil():
                 thblack.configure(background='red')
 
         # ==== PDFViewer=====
-        filename = filedialog.askopenfilename(initialdir=os.getcwd(),
-                                              title='Select pdf file',
-                                              filetypes=(("PDF File", ".pdf"), ("PDF File", ".PDF"), ("All file", ".txt")))
-        if type(filename) == tuple or filename == '':
-            acceuil()
-            return
-        v1 = pdf.ShowPdf()
-        v2 = v1.pdf_view(frame2, pdf_location=open(filename, 'r'), width=75)
-        v2.pack(fill='y', side='left', expand=True)
-        b.place_forget()
-        a.place_forget()
 
-        def rj3():
+        def Umnia():
+            global v2
+            global RBUmnia
+            RBUmnia = filedialog.askopenfilename(initialdir=os.getcwd(),
+                                                title='Select Umnia pdf file',
+                                                filetypes=(("PDF File", ".pdf"), ("PDF File", ".PDF"), ("All file", ".txt")))
+            if type(RBUmnia) == tuple or RBUmnia == '':
+                acceuil()
+                return
+            
+            v1 = pdf.ShowPdf()
+            v2 = v1.pdf_view(frame2, pdf_location=open(RBUmnia, 'r'), width=75)
+            v2.pack(fill='y', side='left', expand=True)
+
+        def AWB():
+            global v2
+            global RBAwb
+            RBAwb = filedialog.askopenfilename(initialdir=os.getcwd(),
+                                            title='Select AWB pdf file',
+                                            filetypes=(("PDF File", ".pdf"), ("PDF File", ".PDF"), ("All file", ".txt")))
+            if type(RBAwb) == tuple or RBAwb == '':
+                acceuil()
+                return 
+            if v2 : 
+                v2.pack_forget()
+            v1 = pdf.ShowPdf()
+            v2 = v1.pdf_view(frame2, pdf_location=open(RBAwb, 'r'), width=75)
+            v2.pack(fill='y', side='right', expand=True)
+
+
+        def Cmi():
+            global v6
+            global RBCmi
+            RBCmi = filedialog.askopenfilename(initialdir=os.getcwd(),
+                                                title='Select excel CMI file',
+                                                filetypes=(("Fichiers Excel CMI", "*.xls"),("Fichiers Excel CMI", "*.xlsx"), ("All file", ".txt")))
+            if type(RBCmi) == tuple or RBCmi == '':
+                acceuil()
+                return
+
+        def afficher_selection():
+            global RBUmnia
+            global RBAwb
+            global RBCmi
+            global selectionsRB
+            global v2
+            global v4
+            global v6
+            global charger
+            global lo20
             global traité
-            if rje3 == 1:
-                sur = messagebox.askquestion(
-                    '!!!', "les données seront perdues !", icon='warning')
-                if sur == 'yes':
-                    btn_re.place_forget()
-                    frame1.destroy()
-                    frame2.destroy()
-                    frame3.destroy()
-                    traité = 0
-                    lo30.place_forget()
-                    acceuil()
-        window.bind("<Escape>", lambda e: rj3())
-        btn_re = Button(window, text='<<--', command=lambda: rj3())
-        btn_re.place(x=0, y=0)
-        lo30 = Label(text='Echap', fg='white',
-                     background='black', font=('Times', 10))
+            for i, var in enumerate(checkbox_vars):
+                if var.get() == 1:
+                    selectionsRB.append(banques[i])
+            topRBMENU.destroy()
+            if selectionsRB == []:
+                frame1.destroy()
+                frame2.destroy()
+                frame3.destroy()
+                traité = 0
+                acceuil()
+            b.place_forget()
+            a.place_forget()
+            for element in selectionsRB:
+                if element == "UmniaBank":
+                    Umnia()
+                if element == "AWB":
+                    AWB()
+                if element == "CMI":
+                    Cmi()
+            charger = Button(frame1, text='Charger les données',
+                             command=traitement)
+            charger.pack(pady=20)
+            lo20 = Label(frame1, text='Entrée', fg='white',
+                         background='black', font=('Times', 10))
+            lo20.pack()
+
+        topRBMENU = Toplevel(window)
+        window_width = window.winfo_reqwidth()
+        window_height = window.winfo_reqheight()
+        screen_width = window.winfo_screenwidth()
+        screen_height = window.winfo_screenheight()
+        x = int((screen_width / 2) - (window_width / 2))
+        y = int((screen_height / 2) - (window_height / 2))
+        topRBMENU.geometry(f"+{x}+{y}")
+        topRBMENU.overrideredirect(True)
+
+        banques = ["UmniaBank", "AWB", "CMI"]
+        checkbox_vars = []
+
+        for i, banque in enumerate(banques):
+            var = IntVar()
+            checkbox = Checkbutton(topRBMENU, text=banque, variable=var)
+            checkbox.pack(anchor=W)
+            checkbox_vars.append(var)
+
+        btn_valider = Button(topRBMENU, text="Valider",
+                             command=afficher_selection)
+        btn_valider.pack()
 
         def traitement():
             global traité
             global Dattta
             global laDate
+            global v2
+            global RBUmnia
+            global RBAwb
+            global RBCmi
+            global selectionsRB
+            global NumAtt
+
             charger.config(bg='gray')
             if traité == 0:
                 Dattta = []
@@ -820,63 +1528,311 @@ def acceuil():
                 année = simpledialog.askinteger(
                     "Année", "Merci de Saisir l'année", initialvalue=2023, parent=None, maxvalue=9999, minvalue=1000)
                 traité = 1
-                lo30.place(x=10, y=35)
                 if année == None:
                     charger.config(text='Charger les données')
                     traité = 0
                     return
+                year = année-2000
                 charger.pack_forget()
                 lo20.pack_forget()
-                v2.forget()
-                tables = tabula.read_pdf(filename, pages='all')
-                table = []
-                for i in range(len(tables)):
-                    tables[i].to_csv(f"table{i}.csv")
-                for j in range(len(tables)):
-                    with open(f"table{j}.csv", 'r') as file:
-                        reader = csv.reader(file)
-                        for each in reader:
-                            if (each[1] != ''):
-                                if (each[len(each)-1] != ''):
-                                    if each.count("Unnamed: 2") == 0:
-                                        if each[4] == '':
-                                            if each.count("Page N°") == 0:
-                                                for i in each:
-                                                    if i == '':
-                                                        each.remove(i)
+                try : 
+                    v2.pack_forget()
+                except : 
+                    donothing = 0
+                try : 
+                    if RBUmnia != '' or type(RBUmnia) == tuple :
+                        tables = tabula.read_pdf(RBUmnia, pages='all')
+                        for i in range(len(tables)):
+                            csv_file = os.path.join(os.getcwd(), f"table{i}.csv")
+                            tables[i].to_csv(csv_file)
+                        for j in range(len(tables)):
+                            csv_file = os.path.join(os.getcwd(), f"table{j}.csv")
+                            with open(csv_file, 'r') as file:
+                                reader = csv.reader(file)
+                                for each in reader:
+                                    if (each[1] != ''):
+                                        if (each[len(each)-1] != ''):
+                                            if each.count("Unnamed: 2") == 0:
+                                                if each[4] == '':
+                                                    if each.count("Page N°") == 0:
                                                         for i in each:
                                                             if i == '':
                                                                 each.remove(i)
-                                                table.append(each)
-                year = année-2000
-                i = 1
-                for each in table:
-                    each[1] = each[1][0:5]+'/'+str(year)
-                    each[0] = 'D-' + str(year) + '-'+each[1][3:5]+'-'+str(i)
-                    i = i+1
-                    type = each[2][0:4]
-                    if type == 'VIRE':
-                        if each[2].count('DE') == 2:
-                            each.insert(3, each[2][29:])
-                        if each[2].count('DE') < 2:
-                            each.insert(3, each[2][24:])
-                        each[2] = 'VIREMENT PERMANENT'
-                    if type == 'VIR ':
-                        each.insert(3, each[2][26:])
-                        each[2] = 'VIREMENT'
-                    if type == 'VERS':
-                        each.insert(3, each[2][13:])
-                        each[2] = 'VERSEMENT'
-                    if type == 'CRED':
-                        each.insert(3, "")
-                    if type == 'ENCA':
-                        each.insert(3, "")
-                    if type == 'OBJE':
-                        each.insert(3, "")
-                table.pop(len(table)-1)
-                for j in range(len(tables)):
-                    os.remove(f"table{j}.csv")
+                                                                for i in each:
+                                                                    if i == '':
+                                                                        each.remove(i)
+                                                        tableUmnia.append(each)
 
+                        i = 1
+                        for each in tableUmnia:
+                            type = each[2][0:4]
+                            if type != 'CRED':
+                                each[1] = each[1][0:5]+'/'+str(year)
+                                each[0] = 'D-' + str(year) + '-'+each[1][3:5]+'-'+str(i)
+                                i = i+1
+                            if type == 'VIRE':
+                                if each[2].count('DE') == 2:
+                                    each.insert(3, each[2][29:])
+                                if each[2].count('DE') < 2:
+                                    each.insert(3, each[2][24:])
+                                each[2] = 'VIREMENT PERMANENT'
+                            if type == 'VIR ':
+                                each.insert(3, each[2][26:])
+                                each[2] = 'VIREMENT'
+                            if type == 'VERS':
+                                each.insert(3, each[2][13:])
+                                each[2] = 'VERSEMENT'
+                            if type == 'ENCA':
+                                each.insert(3, "")
+                            if type == 'OBJE':
+                                each.insert(3, "")
+                        tableUmnia.pop(len(tableUmnia)-1)
+                        for j in range(len(tables)):
+                            os.remove(f"table{j}.csv")
+                except : 
+                        donothing=0
+                
+                try : 
+                    if RBAwb != '' or type(RBAwb) == tuple :
+                        algo = 1
+                        tables2= tabula.read_pdf(RBAwb, pages='all')
+                        for i in range(len(tables2)):
+                            csv_file = os.path.join(os.getcwd(), f"table{i}.csv")
+                            tables2[i].to_csv(csv_file)
+                            # print(tables2[i])
+                        if tableUmnia != [] :
+                            iidd = int(tableUmnia[len(tableUmnia)-1][0][8:])+1
+                        else : 
+                            iidd = 1
+                        for j in range(len(tables2)):
+                            csv_file = os.path.join(os.getcwd(), f"table{j}.csv")
+                            with open(csv_file, 'r') as file : 
+                                reader = csv.reader(file) 
+                                for i, each in enumerate(reader): 
+                                    print(each)
+                                    if len(each) == 4 : 
+                                        algo= 1
+                                    elif len(each) == 5 : 
+                                        algo= 2
+                                    elif len(each) == 6 : 
+                                        algo= 3
+                                    if algo == 1  : 
+                                        if " RECU " in each[1] or " RE CU " in each[1] or " A ENC " in each[1] or "VERSEMENT" in each[1] or "V ER S EM ENT" in each[1] or "RECU " in each[1] or " RECU" in each[1]  : 
+                                            print('ressu',each)
+                                            if each[2] == '' or each[2] == 'NaN' : 
+                                                if any(c.isalpha() for c in each[1][-10:]):
+                                                    ddaattee = '01 01 99'
+                                                else : 
+                                                    ddaattee = each[1][-10:]
+                                            else : 
+                                                ddaattee = each[2]
+                                            if "VIR." in each[1] or "VIREMENT" in each[1] or "VIR " in each[1]: 
+                                                nnoomm = re.search(r" DE ([^0-9]+|$)", each[1])
+                                                try : 
+                                                    nnoomm1 = nnoomm.group(1).strip()
+                                                except : 
+                                                    nnoomm1 = ""
+                                                ttyyppee = "VIREMENT"
+                                            elif "VERSEMENT" in each[1]  or "V ER S EM ENT" in each[1] :
+                                                ttyyppee = "VERSEMENT"
+                                                nnoomm = re.search(r" DEPLACE ([^0-9]+|$)", each[1])
+                                                try : 
+                                                    nnoomm1 = nnoomm.group(1).strip()
+                                                except : 
+                                                    nnoomm1 = ""
+                                            elif "CHEQUE A ENC" in each[1] :
+                                                ttyyppee = 'chèque'.upper()
+                                                nnoomm1 = ""
+                                            ddaattee = ddaattee.replace(" ","/") 
+                                            ddaattee = ddaattee.replace(ddaattee[6:8],"")
+                                            kok = 0
+                                            x = ""
+                                            each[3] = each[3].replace(" ","")
+                                            if len(each[3]) > 4:
+                                                bima = each[3][len(each[3])-3: len(each[3])]
+                                                each[3] = each[3][0:len(each[3])-3]
+                                                for i in range(len(each[3])-1, -1, -1):
+                                                    if kok == 3 or kok == 6 or kok == 9 or kok == 12 or kok == 15 or kok == 18 or kok == 21 or kok == 24 or kok == 27 or kok == 30 or kok == 33 or kok == 36 or kok == 39 or kok == 42:
+                                                        x = x+'.'
+                                                        x = x+each[3][i]
+                                                    else:
+                                                        x = x+each[3][i]
+                                                    kok = kok+1
+                                            if kok != 0:
+                                                each[3] = ''
+                                                for i in range(len(x)-1, -1, -1):
+                                                    each[3] = each[3]+x[i]
+                                                each[3] = each[3]+bima
+                                            tableAWB.append(['D-' +str(year) + '-'+ddaattee[3:5]+'-'+str(iidd),ddaattee,ttyyppee, nnoomm1, each[3] ])
+                                            iidd = iidd+1
+                                    if algo == 3  : 
+                                        if " RECU " in each[1] or " RE CU " in each[1] or " A ENC " in each[1] or "VERSEMENT" in each[1] or "RECU " in each[1]  or "V ER S EM ENT" in each[1] or " RECU" in each[1] : 
+                                            print('ressu',each)
+                                            if each[2] == '' or each[2] == 'NaN' : 
+                                                if any(c.isalpha() for c in each[1][-10:]):
+                                                    ddaattee = '01 01 99'
+                                                else : 
+                                                    ddaattee = each[1][-10:]
+                                            else : 
+                                                ddaattee = each[2]
+                                            if "VIR." in each[1] or "VIREMENT" in each[1] or "VIR " in each[1] : 
+                                                nnoomm = re.search(r" DE ([^0-9]+|$)", each[1])
+                                                try : 
+                                                    nnoomm1 = nnoomm.group(1).strip()
+                                                except : 
+                                                    nnoomm1 = ""
+                                                ttyyppee = "VIREMENT"
+                                            elif "VERSEMENT" in each[1] or "V ER S EM ENT" in each[1] :
+                                                ttyyppee = "VERSEMENT"
+                                                nnoomm = re.search(r" DEPLACE ([^0-9]+|$)", each[1])
+                                                try : 
+                                                    nnoomm1 = nnoomm.group(1).strip()
+                                                except : 
+                                                    nnoomm1 = ""
+                                            elif "CHEQUE A ENC" in each[1] :
+                                                ttyyppee = 'chèque'.upper()
+                                                nnoomm1 = ""
+                                            ddaattee = ddaattee.replace(" ","/") 
+                                            ddaattee = ddaattee.replace(ddaattee[6:8],"")
+                                            kok = 0
+                                            x = ""
+                                            each[5] = each[5].replace(" ","")
+                                            if len(each[5]) > 4:
+                                                bima = each[5][len(each[5])-3: len(each[5])]
+                                                each[5] = each[5][0:len(each[5])-3]
+                                                for i in range(len(each[5])-1, -1, -1):
+                                                    if kok == 3 or kok == 6 or kok == 9 or kok == 12 or kok == 15 or kok == 18 or kok == 21 or kok == 24 or kok == 27 or kok == 30 or kok == 33 or kok == 36 or kok == 39 or kok == 42:
+                                                        x = x+'.'
+                                                        x = x+each[5][i]
+                                                    else:
+                                                        x = x+each[5][i]
+                                                    kok = kok+1
+                                            if kok != 0:
+                                                each[5] = ''
+                                                for i in range(len(x)-1, -1, -1):
+                                                    each[5] = each[5]+x[i]
+                                                each[5] = each[5]+bima
+                                            tableAWB.append(['D-' + str(year)  + '-'+ddaattee[3:5]+'-'+str(iidd),ddaattee,ttyyppee, nnoomm1, each[5]])
+                                            iidd = iidd+1
+                                    if algo == 2 : 
+                                        if " RECU " in each[1] or " RE CU " in each[1]  or " A ENC " in each[1] or "VERSEMENT" in each[1] or "RECU " in each[1] or "V ER S EM ENT" in each[1]  or " RECU" in each[1] : 
+                                            print('ressu',each)
+                                            if each[2] == '' or each[2] == 'NaN' : 
+                                                if any(c.isalpha() for c in each[1][-10:]):
+                                                    ddaattee = '01 01 99'
+                                                else : 
+                                                    ddaattee = each[1][-10:]
+                                            else : 
+                                                ddaattee = each[2]
+                                            if "VIR." in each[1] or "VIREMENT" in each[1] or "VIR " in each[1]: 
+                                                nnoomm = re.search(r" DE ([^0-9]+|$)", each[1])
+                                                try : 
+                                                    nnoomm1 = nnoomm.group(1).strip()
+                                                except : 
+                                                    nnoomm1 = ""
+                                                ttyyppee = "VIREMENT"
+                                            elif "VERSEMENT" in each[1]  or "V ER S EM ENT" in each[1]:
+                                                ttyyppee = "VERSEMENT"
+                                                nnoomm = re.search(r" DEPLACE ([^0-9]+|$)", each[1])
+                                                try : 
+                                                    nnoomm1 = nnoomm.group(1).strip()
+                                                except : 
+                                                    nnoomm1 = ""
+                                            elif "CHEQUE A ENC" in each[1] :
+                                                ttyyppee = 'chèque'.upper()
+                                                nnoomm1 = ""
+                                            ddaattee = ddaattee.replace(" ","/") 
+                                            ddaattee = ddaattee.replace(ddaattee[6:8],"")
+                                            kok = 0
+                                            x = ""
+                                            each[4] = each[4].replace(" ","")
+                                            if len(each[4]) > 4:
+                                                bima = each[4][len(each[4])-3: len(each[4])]
+                                                each[4] = each[4][0:len(each[4])-3]
+                                                for i in range(len(each[4])-1, -1, -1):
+                                                    if kok == 3 or kok == 6 or kok == 9 or kok == 12 or kok == 15 or kok == 18 or kok == 21 or kok == 24 or kok == 27 or kok == 30 or kok == 33 or kok == 36 or kok == 39 or kok == 42:
+                                                        x = x+'.'
+                                                        x = x+each[4][i]
+                                                    else:
+                                                        x = x+each[4][i]
+                                                    kok = kok+1
+                                            if kok != 0:
+                                                each[4] = ''
+                                                for i in range(len(x)-1, -1, -1):
+                                                    each[4] = each[4]+x[i]
+                                                each[4] = each[4]+bima
+                                            tableAWB.append(['D-' + str(year)  + '-'+ddaattee[3:5]+'-'+str(iidd),ddaattee,ttyyppee, nnoomm1, each[4]])
+                                            iidd = iidd+1
+                        # for i in range(len(tableAWB)):
+                        #     print(tableAWB[i])
+
+                        for j in range(len(tables2)):
+                            os.remove(f"table{j}.csv")                
+                except : 
+                        donothing=0
+
+                # for i in range(len(tableAWB)):
+                #     print(tableAWB[i])
+
+                try : 
+                    if RBCmi != '' or type(RBCmi) == tuple :
+                        def read_data_from_excel_xls(input_file_path):
+                            workbook = xlrd.open_workbook(input_file_path)
+                            sheet = workbook.sheet_by_index(0)
+
+                            data = []
+                            for row_idx in range(sheet.nrows):
+                                row_data = sheet.row_values(row_idx)
+                                data.append(row_data)
+
+                            return data
+                        
+                        if tableAWB != [] :
+                            iidd = int(tableAWB[len(tableAWB)-1][0][8:])+1
+                        else : 
+                            if tableUmnia != [] :
+                                iidd = int(tableUmnia[len(tableUmnia)-1][0][8:])+1
+                            else : 
+                                iidd=1
+                        dataCMI = read_data_from_excel_xls(RBCmi)
+                        for i in range(len(dataCMI)):
+                            if i != 0:
+                                number = dataCMI[i][4]
+                                formatted_number = "{:.2f}".format(number).replace('.', ',')
+                                def format_number_with_dots(number):
+                                    # Convertir le nombre en chaîne de caractères
+                                    num_str = str(number)
+                                    
+                                    # Diviser la partie entière et la partie décimale
+                                    if '.' in num_str:
+                                        integer_part, decimal_part = num_str.split('.')
+                                    else:
+                                        integer_part = num_str
+                                        decimal_part = ''
+                                    # Formatter la partie entière avec des points
+                                    formatted_integer = ''
+                                    count = 0
+                                    for digit in reversed(integer_part):
+                                        formatted_integer = digit + formatted_integer
+                                        count += 1
+                                        if count % 3 == 0 and count != len(integer_part):
+                                            formatted_integer = '.' + formatted_integer
+                                    
+                                    # Recomposer le nombre avec la partie décimale
+                                    formatted_number = formatted_integer
+                                    if decimal_part:
+                                        formatted_number += ',' + decimal_part
+                                    formatted_number = formatted_number[:len(formatted_number)-4] + formatted_number[len(formatted_number)-3:]
+                                    return formatted_number
+                                if dataCMI[i][6] == 'Authentifié' :
+                                    date_input = dataCMI[i][2].split()[0][2:].replace('-', '/')
+                                    date_parts = date_input.split('/')
+                                    formatted_date = f"{date_parts[2]}/{date_parts[1]}/{date_parts[0]}"
+                                    tableCMI.append(['D' + '-' + str(year) + "-" + dataCMI[i][2][5:7] + '-'+str(iidd),formatted_date, "CARTE BANCAIRE" ,dataCMI[i][7],format_number_with_dots(formatted_number) ])
+                                    iidd = iidd+1
+                except Exception as e:
+                    print("Une erreur s'est produite :", e)
+                table =  tableUmnia+tableAWB +tableCMI
                 style = ttk.Style()
                 style.theme_use('default')
                 style.configure("Treeview", foreground="black",
@@ -884,6 +1840,7 @@ def acceuil():
                 scrolly = ttk.Scrollbar(frame2, orient=VERTICAL)
                 my_tree = ttk.Treeview(
                     frame2, height=37, yscrollcommand=scrolly.set)
+
                 my_tree.tag_configure('gray', background='gray')
                 my_tree.tag_configure('normal', background='white')
                 my_tree.tag_configure('blue', background='lightblue')
@@ -891,6 +1848,7 @@ def acceuil():
                 my_tree.tag_configure('red', background='red')
                 my_tree['columns'] = ("Date", "Mois", "Type", "NOM Donneur d'ordre",
                                       "Montant", "Détail", "Montant en lettre", "N° Attestation")
+
                 my_tree.column("#0", width=0, stretch=NO)
                 my_tree.column("Date", width=80, anchor=CENTER, minwidth=25)
                 my_tree.column("Mois", width=90, anchor=CENTER, minwidth=25)
@@ -904,6 +1862,7 @@ def acceuil():
                                anchor=CENTER, minwidth=25)
                 my_tree.column("N° Attestation", width=120,
                                anchor=CENTER, minwidth=25)
+
                 my_tree.heading("#0", text="", anchor=W)
                 my_tree.heading("Date", text="Date", anchor=CENTER)
                 my_tree.heading("Mois", text="Mois", anchor=CENTER)
@@ -916,66 +1875,55 @@ def acceuil():
                                 text="Montant en lettre", anchor=CENTER)
                 my_tree.heading("N° Attestation",
                                 text="N° Attestation", anchor=CENTER)
+
+                my_tree.tag_configure("pink", background="purple")
                 my_tree.pack(padx=5, fill='y')
                 scrolly.configure(command=my_tree.yview)
                 scrolly.place(y=70, height=860, x=1655)
                 laDate = table[1][1]
                 for i in table:
-                    if i[1][3:5] == '01':
-                        mois = 'JANVIER'
-                    if i[1][3:5] == '02':
-                        mois = 'FEVRIER'
-                    if i[1][3:5] == '03':
-                        mois = 'MARS'
-                    if i[1][3:5] == '04':
-                        mois = 'AVRIL'
-                    if i[1][3:5] == '05':
-                        mois = 'MAI'
-                    if i[1][3:5] == '06':
-                        mois = 'JUIN'
-                    if i[1][3:5] == '07':
-                        mois = 'JUILLET'
-                    if i[1][3:5] == '08':
-                        mois = 'AOUT'
-                    if i[1][3:5] == '09':
-                        mois = 'SEPTEMBRE'
-                    if i[1][3:5] == '10':
-                        mois = 'OCTOBRE'
-                    if i[1][3:5] == '11':
-                        mois = 'NOVEMBRE'
-                    if i[1][3:5] == '12':
-                        mois = 'DECEMBRE'
-
-                    def chiftolett(value, skip=-1):
-                        if int(value) < len(units) and units[int(value)]:
-                            return [] if int(value) <= skip else [units[int(value)]]
-                        for name, v in bases:
-                            if int(value) >= v:
-                                return chiftolett(int(int(value)/v), 1 if v <= 1000 else -1) + [name] + chiftolett(int(int(value) % v), 0)
-                    lenght = len(i[4])
-                    po = i[4][lenght-2]+i[4][lenght-1]
                     l = len(i[2])
-                    mytag = 'normal'
-                    if i[2][0:6] == 'ENCAIS':
-                        i[2]='chèque'.upper()
-                    if i[2][0:l] == 'CREDIT COMMERCANT':
-                        mytag = 'blue'
-                    if i[2][0:l] != 'CREDIT COMMERCANT' and i[3] == '':
-                        mytag = 'red'
-                    if mytag == 'blue':
-                        if po == '00':
-                            my_tree.insert(parent='', index='end', iid=i, text='', values=(i[1], mois, i[2].replace('CREDIT COMMERCANT', 'CARTE BANCAIRE'), i[3], i[4], "", "".join(
-                                chiftolett(int(int(i[4].replace(',', '').replace('.', ''))/100))), i[0]), tags=(mytag))
-                            mytag = 'normal'
-                        else:
-                            ntl = "".join(chiftolett(
-                                int(int(i[4].replace(',', '').replace('.', ''))/100)))
-                            ntl += 'VIRGULE '
-                            ntl += "".join(chiftolett(int(po)))
-                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                i[1], mois, i[2].replace('CREDIT COMMERCANT', 'CARTE BANCAIRE'), i[3], i[4], "", ntl, i[0]), tags=(mytag))
-                            mytag = 'normal'
-                    else:
+                    if i[2][0:l] != 'CREDIT COMMERCANT':
+                        if i[1][3:5] == '01':
+                            mois = 'JANVIER'
+                        if i[1][3:5] == '02':
+                            mois = 'FEVRIER'
+                        if i[1][3:5] == '03':
+                            mois = 'MARS'
+                        if i[1][3:5] == '04':
+                            mois = 'AVRIL'
+                        if i[1][3:5] == '05':
+                            mois = 'MAI'
+                        if i[1][3:5] == '06':
+                            mois = 'JUIN'
+                        if i[1][3:5] == '07':
+                            mois = 'JUILLET'
+                        if i[1][3:5] == '08':
+                            mois = 'AOUT'
+                        if i[1][3:5] == '09':
+                            mois = 'SEPTEMBRE'
+                        if i[1][3:5] == '10':
+                            mois = 'OCTOBRE'
+                        if i[1][3:5] == '11':
+                            mois = 'NOVEMBRE'
+                        if i[1][3:5] == '12':
+                            mois = 'DECEMBRE'
+
+                        def chiftolett(value, skip=-1):
+                            if int(value) < len(units) and units[int(value)]:
+                                return [] if int(value) <= skip else [units[int(value)]]
+                            for name, v in bases:
+                                if int(value) >= v:
+                                    return chiftolett(int(int(value)/v), 1 if v <= 1000 else -1) + [name] + chiftolett(int(int(value) % v), 0)
+                        lenght = len(i[4])
+                        po = i[4][lenght-2]+i[4][lenght-1]
+                        mytag = 'normal'
+                        if i[2][0:6] == 'ENCAIS':
+                            i[2] = 'chèque'.upper()
+                        if i[3] == '' or  i[3] == ' ':
+                            mytag = 'red'
+                        if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[1]) : 
+                            mytag = 'pink'
                         if po == '00':
                             my_tree.insert(parent='', index='end', iid=i, text='', values=(i[1], mois, i[2].replace('CREDIT COMMERCANT', 'CARTE BANCAIRE').replace('ENCAISSEMENT CHEQUE NUM - ', ''), i[3], i[4], "", "".join(
                                 chiftolett(int(int(i[4].replace(',', '').replace('.', ''))/100))), i[0]), tags=(mytag))
@@ -988,11 +1936,9 @@ def acceuil():
                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                 i[1], mois, i[2].replace('CREDIT COMMERCANT', 'CARTE BANCAIRE'), i[3], i[4], "", ntl, i[0]), tags=(mytag))
                             mytag = 'normal'
-
                 children = my_tree.get_children()
                 for parent in my_tree.get_children():
                     Dattta.append(my_tree.item(parent)["values"])
-
                 pdff = Button(frame1, text='PDF',
                               command=lambda: showPDF())
                 pdff.pack(padx=20)
@@ -1000,6 +1946,7 @@ def acceuil():
                            background='black', font=('Times', 10))
                 lo.pack()
                 frame3.pack(fill='y', padx=10, pady=10)
+
                 Date = StringVar()
                 Mois = StringVar()
                 Type = StringVar()
@@ -1026,6 +1973,15 @@ def acceuil():
                         lo4.pack_forget()
                         lo5.pack_forget()
                         rowscolor.place_forget()
+                        AttTypeD.place_forget()
+                        AttTypeS.place_forget()
+                        AttTypeP.place_forget()
+                        AttTypeC.place_forget()
+                        Mme.place_forget()
+                        Mlle.place_forget()
+                        Mr.place_forget()
+                        Dr.place_forget()
+                        organise.place_forget()
 
                     else:
                         add.pack_forget()
@@ -1045,6 +2001,1435 @@ def acceuil():
                         Attestation.pack(pady=20, padx=20)
                         lo5.pack()
                         rowscolor.place(x=75, y=5)
+                        AttTypeD.place(x=1525, y=10)
+                        AttTypeS.place(x=1560, y=10)
+                        AttTypeP.place(x=1595, y=10)
+                        AttTypeC.place(x=1630, y=10)
+                        Dr.place(x=545,y=10)
+                        Mme.place(x=600, y=10)
+                        Mlle.place(x=670, y=10)
+                        Mr.place(x=740, y=10)
+                        organise.place(x=1660, y = 50)
+
+
+                def editTypeAttD(tree):
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    global ope
+                    global Organ 
+                    Organ = 5
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][7][0] == "D":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'D-', 'D-')
+                                            if Dattta[j][7][0] == "S":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'S-', 'D-')
+                                            if Dattta[j][7][0] == "P":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'P-', 'D-')
+                                            if Dattta[j][7][0] == "C":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'C-', 'D-')
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
+
+                def editTypeAttS(tree):
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    global ope
+                    global Organ 
+                    Organ = 5
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][7][0] == "D":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'D-', 'S-')
+                                            if Dattta[j][7][0] == "S":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'S-', 'S-')
+                                            if Dattta[j][7][0] == "P":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'P-', 'S-')
+                                            if Dattta[j][7][0] == "C":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'C-', 'S-')
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
+
+                def editTypeAttP(tree):
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    global ope
+                    global Organ 
+                    Organ = 5
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][7][0] == "D":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'D-', 'P-')
+                                            if Dattta[j][7][0] == "S":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'S-', 'P-')
+                                            if Dattta[j][7][0] == "P":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'P-', 'P-')
+                                            if Dattta[j][7][0] == "C":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'C-', 'P-')
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
+                def organiser(tree) : 
+                    global Dattta
+                    global Organ 
+                    global bach
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo 
+                    global ope
+                    changerowcolo = 0
+                    if ope == 0:
+                        ope = 1
+                        for parent in my_tree.get_children():
+                            my_tree.delete(parent)
+                        my_tree.tag_configure('yellow', background = 'yellow')
+                        my_tree.tag_configure('orange', background = 'orange')
+                        my_tree.tag_configure('brown', background='brown')
+                        my_tree.tag_configure("pink", background="purple")
+                        mytag = 'normal'
+                        if reloulo == 0:
+                            if Organ == 1 : 
+                                Organ = 2 
+                                AttTypeD.place_forget()
+                                AttTypeS.place_forget()
+                                AttTypeP.place_forget()
+                                AttTypeC.place_forget()
+                                AttTypeC.place(x=1525, y=10)
+                                AttTypeD.place(x=1560, y=10)
+                                AttTypeS.place(x=1595, y=10)
+                                AttTypeP.place(x=1630, y=10)
+                                for i in Dattta:
+                                    if i[7][0] == 'C':
+                                        mytag = 'brown'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'D':
+                                        mytag = 'normal'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'S':
+                                        mytag = 'yellow'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'P':
+                                        mytag = 'orange'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                            elif Organ == 2 : 
+                                Organ = 3 
+                                AttTypeD.place_forget()
+                                AttTypeS.place_forget()
+                                AttTypeP.place_forget()
+                                AttTypeC.place_forget()
+                                AttTypeP.place(x=1525, y=10)
+                                AttTypeC.place(x=1560, y=10)
+                                AttTypeD.place(x=1595, y=10)
+                                AttTypeS.place(x=1630, y=10)
+                                for i in Dattta:
+                                    if i[7][0] == 'P':
+                                        mytag = 'orange'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'C':
+                                        mytag = 'brown'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'D':
+                                        mytag = 'normal'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'S':
+                                        mytag = 'yellow'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                            elif Organ == 0 or Organ == 5 : 
+                                AttTypeD.place_forget()
+                                AttTypeS.place_forget()
+                                AttTypeP.place_forget()
+                                AttTypeC.place_forget()
+                                AttTypeD.place(x=1525, y=10)
+                                AttTypeS.place(x=1560, y=10)
+                                AttTypeP.place(x=1595, y=10)
+                                AttTypeC.place(x=1630, y=10)
+                                Organ = 1 
+                                for i in Dattta:
+                                    if i[7][0] == 'D':
+                                        mytag = 'normal'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'S':
+                                        mytag = 'yellow'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'P':
+                                        mytag = 'orange'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'C':
+                                        mytag = 'brown'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                            elif Organ == 3 : 
+                                Organ = 0 
+                                AttTypeD.place_forget()
+                                AttTypeS.place_forget()
+                                AttTypeP.place_forget()
+                                AttTypeC.place_forget()
+                                AttTypeS.place(x=1525, y=10)
+                                AttTypeP.place(x=1560, y=10)
+                                AttTypeC.place(x=1595, y=10)
+                                AttTypeD.place(x=1630, y=10)
+                                for i in Dattta:
+                                    if i[7][0] == 'S':
+                                        mytag = 'yellow'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'P':
+                                        mytag = 'orange'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'C':
+                                        mytag = 'brown'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in Dattta:
+                                    if i[7][0] == 'D':
+                                        mytag = 'normal'
+                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                            Dattta.clear()
+                            for parent in my_tree.get_children():
+                                Dattta.append(my_tree.item(parent)["values"])
+                        elif reloulo == 1:
+                            try:
+                                if bach == 'date':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    
+                                    elif Organ == 0 or Organ == 5 : 
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[0]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                if bach == 'mois':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif  Organ == 0 or Organ == 5  : 
+                                        
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[1]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                    i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                if bach == 'type':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif  Organ == 0 or Organ == 5 : 
+                                        
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[2]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                if bach == 'nom':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif  Organ == 0 or Organ == 5 : 
+                                        
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[3]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                if bach == 'montant':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif  Organ == 0 or Organ == 5  : 
+                                        
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[4]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                if bach == 'détail':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif  Organ == 0 or Organ == 5  : 
+                                        
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[5]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                if bach == 'mol':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif  Organ == 0 or Organ == 5  : 
+                                        
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[6]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                if bach == 'att':
+                                    if Organ == 1 : 
+                                        Organ = 2 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeC.place(x=1525, y=10)
+                                        AttTypeD.place(x=1560, y=10)
+                                        AttTypeS.place(x=1595, y=10)
+                                        AttTypeP.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 2 : 
+                                        Organ = 3 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeP.place(x=1525, y=10)
+                                        AttTypeC.place(x=1560, y=10)
+                                        AttTypeD.place(x=1595, y=10)
+                                        AttTypeS.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif  Organ == 0 or Organ == 5  : 
+                                        
+                                        Organ = 1 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeD.place(x=1525, y=10)
+                                        AttTypeS.place(x=1560, y=10)
+                                        AttTypeP.place(x=1595, y=10)
+                                        AttTypeC.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    elif Organ == 3 : 
+                                        Organ = 0 
+                                        AttTypeD.place_forget()
+                                        AttTypeS.place_forget()
+                                        AttTypeP.place_forget()
+                                        AttTypeC.place_forget()
+                                        AttTypeS.place(x=1525, y=10)
+                                        AttTypeP.place(x=1560, y=10)
+                                        AttTypeC.place(x=1595, y=10)
+                                        AttTypeD.place(x=1630, y=10)
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'S':
+                                                    mytag = 'yellow'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'P':
+                                                    mytag = 'orange'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'C':
+                                                    mytag = 'brown'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                        for i in Dattta:
+                                            if kn9lb3la in i[7]:
+                                                if i[7][0] == 'D':
+                                                    mytag = 'normal'
+                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                            except:
+                                donothing = 0
+                                children = my_tree.get_children()
+                                if children:
+                                    my_tree.focus(children[0])
+                                    my_tree.selection_set(children[0])
+                                    my_tree.selection_add(children[0])
+                        ope = 0
+                def editTypeAttC(tree):
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    global ope
+                    global Organ 
+                    Organ = 5
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][7][0] == "D":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'D-', 'C-')
+                                            if Dattta[j][7][0] == "S":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'S-', 'C-')
+                                            if Dattta[j][7][0] == "P":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'P-', 'C-')
+                                            if Dattta[j][7][0] == "C":
+                                                Dattta[j][7] = Dattta[j][7].replace(
+                                                    'C-', 'C-')
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
 
                 def editData(tree):
                     global ope
@@ -1052,32 +3437,209 @@ def acceuil():
                         ope = 1
                         curItem = tree.focus()
                         values = tree.item(curItem, "values")
+                        indexkhdr = tree.index(curItem)
                         if len(tree.selection()) < 2:
                             if len(curItem) > 0:
                                 topEdit = Toplevel()
                                 topEdit.title("Modifier")
-                                topEdit.geometry("500x400")
+                                topEdit.geometry("500x430")
                                 icon = PhotoImage(file='logo-light.png')
                                 window.tk.call(
                                     'wm', 'iconphoto', topEdit._w, icon)
                                 topEdit.resizable(width=0, height=0)
+
+                                def idcode(e):
+                                    global Dattta
+                                    compte7taline = 0 
+                                    compteC = 0 
+                                    compteD = 0 
+                                    compteS = 0
+                                    compteP = 0
+                                    if values[7][0] == 'D' : 
+                                        compteC = 1
+                                        compteD = 0 
+                                        compteS = 1
+                                        compteP = 1
+                                    if values[7][0] == 'P' : 
+                                        compteC = 1
+                                        compteD = 1 
+                                        compteS = 1
+                                        compteP = 0
+                                    if values[7][0] == 'C' : 
+                                        compteC = 0
+                                        compteD = 1 
+                                        compteS = 1
+                                        compteP = 1
+                                    if values[7][0] == 'S' : 
+                                        compteC = 1
+                                        compteD = 1
+                                        compteS = 0
+                                        compteP = 1
+                                    for i in range(len(Dattta)):
+                                        if Dattta[i][7] == values[7]  : 
+                                            compte7taline =  compte7taline + 1 
+                                            break
+                                        else : 
+                                            compte7taline =  compte7taline + 1 
+                                    id = values[7][8:len(values[7])]
+                                    if e == "C":
+                                        C.configure(
+                                            font=('Times', 11, 'bold'), bg='green', fg='white')
+                                        P.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        S.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        D.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    if e == "S":
+                                        S.configure(
+                                            font=('Times', 11, 'bold'), bg='green', fg='white')
+                                        P.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        C.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        D.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    if e == "D":
+                                        D.configure(
+                                            font=('Times', 11, 'bold'), bg='green', fg='white')
+                                        C.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        S.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        P.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    if e == "P":
+                                        P.configure(
+                                            font=('Times', 11, 'bold'), bg='green', fg='white')
+                                        C.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        S.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                        D.configure(
+                                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+
+                                    if D.cget('bg') == 'blue' and C.cget('bg') == 'blue' and P.cget('bg') == 'blue' and S.cget('bg') == 'blue':
+                                        for li in range(len(Dattta)+1):
+                                            if li == compte7taline : 
+                                                break
+                                            if Dattta[li][7][0] == "D":
+                                                compteD = compteD + 1
+                                        if compteD == 0 : 
+                                            compteD = 1  
+                                        e16.config(state='normal')
+                                        e16.delete(0, 'end')
+                                        e16.insert(
+                                            'end', 'D-' + e9.get()[6: len(e9.get())] + '-' + e9.get()[3:5] + '-' + str(compteD))
+                                        if e9.get() == '':
+                                            e16.delete(0, 'end')
+                                            e16.insert('end', 'D-AA-MM-'+ str(compteD))
+                                        e16.config(state='disabled')
+
+                                    if D.cget('bg') == 'green':
+                                        for li in range(len(Dattta)+1):
+                                            if li == compte7taline : 
+                                                break
+                                            if Dattta[li][7][0] == "D":
+                                                compteD = compteD + 1 
+                                        if compteD == 0 : 
+                                            compteD = 1 
+                                        e16.config(state='normal')
+                                        e16.delete(0, 'end')
+                                        e16.insert(
+                                            'end', 'D-' + e9.get()[6: len(e9.get())] + '-' + e9.get()[3:5] + '-'+ str(compteD))
+                                        if e9.get() == '':
+                                            e16.delete(0, 'end')
+                                            e16.insert('end', 'D-AA-MM-'+ str(compteD))
+                                        e16.config(state='disabled')
+
+                                    if C.cget('bg') == 'green':
+                                        for li in range(len(Dattta)+1):
+                                            if li == compte7taline : 
+                                                break
+                                            if Dattta[li][7][0] == "C":
+                                                compteC = compteC + 1 
+                                        if compteC == 0 : 
+                                            compteC = 1 
+                                        e16.config(state='normal')
+                                        e16.delete(0, 'end')
+                                        e16.insert(
+                                            'end', 'C-' + e9.get()[6: len(e9.get())] + '-' + e9.get()[3:5] + '-'+ str(compteC))
+                                        if e9.get() == '':
+                                            e16.delete(0, 'end')
+                                            e16.insert('end', 'C-AA-MM-'+ str(compteC))
+                                        e16.config(state='disabled')
+
+                                    if P.cget('bg') == 'green':
+                                        for li in range(len(Dattta)+1):
+                                            if li == compte7taline : 
+                                                break
+                                            if Dattta[li][7][0] == "P":
+                                                compteP = compteP + 1
+                                        if compteP == 0 : 
+                                            compteP = 1 
+                                        e16.config(state='normal')
+                                        e16.delete(0, 'end')
+                                        e16.insert(
+                                            'end', 'P-' + e9.get()[6: len(e9.get())] + '-' + e9.get()[3:5] + '-' + str(compteP))
+                                        if e9.get() == '':
+                                            e16.delete(0, 'end')
+                                            e16.insert('end', 'P-AA-MM-'+ str(compteP))
+                                        e16.config(state='disabled')
+
+                                    if S.cget('bg') == 'green':
+                                        for li in range(len(Dattta)+1):
+                                            if li == compte7taline : 
+                                                break
+                                            if Dattta[li][7][0] == "S":
+                                                compteS = compteS + 1 
+                                        if compteS == 0 : 
+                                            compteS = 1 
+                                        e16.config(state='normal')
+                                        e16.delete(0, 'end')
+                                        e16.insert(
+                                            'end', 'S-' + e9.get()[6: len(e9.get())] + '-' + e9.get()[3:5] + '-' + str(compteS))
+                                        if e9.get() == '':
+                                            e16.delete(0, 'end')
+                                            e16.insert('end', 'S-AA-MM-'+ str(compteS))
+                                        e16.config(state='disabled')
+                                D = Button(
+                                    topEdit, text='D', command=lambda: idcode("D"))
+                                D.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                D.place(x=200, y=20)
+                                S = Button(
+                                    topEdit, text='S', command=lambda: idcode("S"))
+                                S.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                S.place(x=230, y=20)
+                                P = Button(
+                                    topEdit, text='P', command=lambda: idcode("P"))
+                                P.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                P.place(x=260, y=20)
+                                C = Button(
+                                    topEdit, text='C', command=lambda: idcode("C"))
+                                C.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                C.place(x=290, y=20)
                                 l9 = Label(topEdit, text="Date", width=20,
                                            font=('Times', 11, 'bold'))
                                 e9 = Entry(
                                     topEdit, textvariable=Date, width=25)
-                                l9.place(x=50, y=30)
-                                e9.place(x=200, y=30)
+                                l9.place(x=50, y=60)
+                                e9.place(x=200, y=60)
 
                                 l10 = Label(topEdit, text="Mois", width=20,
                                             font=('Times', 11, 'bold'))
                                 e10 = Entry(
                                     topEdit, textvariable=Mois, width=25)
-                                l10.place(x=50, y=70)
-                                e10.place(x=200, y=70)
+                                l10.place(x=50, y=100)
+                                e10.place(x=200, y=100)
 
                                 l11 = Label(topEdit, text="Type", width=20,
                                             font=('Times', 11, 'bold'))
-                                
+
                                 options = [
                                     "VIREMENT PERMANENT",
                                     "VIREMENT",
@@ -1085,58 +3647,98 @@ def acceuil():
                                     "CARTE BANCAIRE",
                                     "espèces".upper(),
                                 ]
-                                
+
                                 # datatype of menu text
                                 clicked = StringVar()
-                                
+
                                 # initial menu text
-                                clicked.set( values[2] )
-                                
+                                clicked.set(values[2])
+
                                 # Create Dropdown menu
-                                drop = OptionMenu( topEdit , clicked , *options )
-                                drop.place(x=200, y=105)
-                                l11.place(x=50, y=110)
+                                drop = OptionMenu(topEdit, clicked, *options)
+                                drop.place(x=200, y=135)
+                                l11.place(x=50, y=140)
 
                                 l12 = Label(topEdit, text="Nom donneur d'ordre",
                                             width=20, font=('Times', 11, 'bold'))
                                 e12 = Entry(
                                     topEdit, textvariable=Nom, width=25)
-                                l12.place(x=50, y=150)
-                                e12.place(x=200, y=150)
+                                l12.place(x=50, y=180)
+                                e12.place(x=200, y=180)
 
                                 l13 = Label(topEdit, text="Montant",
                                             width=20, font=('Times', 11, 'bold'))
                                 e13 = Entry(
                                     topEdit, textvariable=Montant, width=25)
-                                l13.place(x=50, y=190)
-                                e13.place(x=200, y=190)
+                                l13.place(x=50, y=220)
+                                e13.place(x=200, y=220)
 
                                 l14 = Label(topEdit, text="Détail",
                                             width=20, font=('Times', 11, 'bold'))
                                 e14 = Entry(
                                     topEdit, textvariable=détail, width=25)
-                                l14.place(x=50, y=230)
-                                e14.place(x=200, y=230)
+                                l14.place(x=50, y=260)
+                                e14.place(x=200, y=260)
 
                                 l15 = Label(topEdit, text="Montant en lettre",
                                             width=20, font=('Times', 11, 'bold'))
                                 e15 = Entry(
                                     topEdit, textvariable=Montant_en_lettre, width=25)
-                                l15.place(x=50, y=270)
-                                e15.place(x=200, y=270)
+                                l15.place(x=50, y=300)
+                                e15.place(x=200, y=300)
 
                                 l16 = Label(topEdit, text="N° Attestation",
                                             width=20, font=('Times', 11, 'bold'))
                                 e16 = Entry(
                                     topEdit, textvariable=NAttestation, width=25)
-                                l16.place(x=50, y=310)
-                                e16.place(x=200, y=310)
+                                l16.place(x=50, y=340)
+                                e16.place(x=200, y=340)
                                 e9.focus()
+                                if values[7][0] == 'D' : 
+                                    D.configure(
+                                        font=('Times', 11, 'bold'), bg='green', fg='white')
+                                    C.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    P.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    S.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                elif values[7][0] == 'S' : 
+                                    D.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    C.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    P.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    S.configure(
+                                        font=('Times', 11, 'bold'), bg='green', fg='white')
+                                elif values[7][0] == 'C' : 
+                                    D.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    C.configure(
+                                        font=('Times', 11, 'bold'), bg='green', fg='white')
+                                    P.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    S.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                elif values[7][0] == 'P' : 
+                                    D.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    C.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                    P.configure(
+                                        font=('Times', 11, 'bold'), bg='green', fg='white')
+                                    S.configure(
+                                        font=('Times', 11, 'bold'), bg='blue', fg='white')
+
+                                e9.bind("<KeyRelease>", idcode)
 
                                 def insertData(tree):
                                     global ope
                                     nonlocal e9, e10, e12, e13, e14, e15, e16
                                     global Dattta
+                                    global Organ 
+                                    Organ = 5
                                     da = Date.get().strip()
                                     mo = Mois.get().strip()
                                     ty = clicked.get().upper()
@@ -1145,8 +3747,8 @@ def acceuil():
                                     dé = détail.get().strip()
                                     mol = Montant_en_lettre.get().strip()
                                     att = NAttestation.get().strip()
-                                    x=""
-                                    kok=0
+                                    x = ""
+                                    kok = 0
 
                                     if mon.count(',') == 1:
                                         if len(mon)-mon.index(',') != 3:
@@ -1198,23 +3800,23 @@ def acceuil():
                                             title='Erreur !!', message="La date doit être sous la forme suivante :\n\n            'JJxMMxAA'", parent=topEdit)
                                         ope = 0
                                         return
-                                 
-                                    mon=mon.replace('.','')
-                                    if len(mon)>4 :
-                                        bima=mon[len(mon)-3: len(mon)]
-                                        mon=mon[0:len(mon)-3]
-                                        for i in range(len(mon)-1,-1,-1) : 
-                                            if kok==3 or kok==6 or kok==9 or kok==12 or kok==15 or kok==18 or kok==21:
-                                                x=x+'.'
-                                                x= x+mon[i]
-                                            else : 
-                                                x= x+mon[i]
-                                            kok=kok+1
-                                    if kok!=0 : 
-                                        mon=''
-                                        for i in range(len(x)-1,-1,-1):
-                                            mon=mon+x[i]
-                                        mon=mon+bima
+
+                                    mon = mon.replace('.', '')
+                                    if len(mon) > 4:
+                                        bima = mon[len(mon)-3: len(mon)]
+                                        mon = mon[0:len(mon)-3]
+                                        for i in range(len(mon)-1, -1, -1):
+                                            if kok == 3 or kok == 6 or kok == 9 or kok == 12 or kok == 15 or kok == 18 or kok == 21 or kok == 24 or kok == 27 or kok == 30 or kok == 33 or kok == 36 or kok == 39 or kok == 42:
+                                                x = x+'.'
+                                                x = x+mon[i]
+                                            else:
+                                                x = x+mon[i]
+                                            kok = kok+1
+                                    if kok != 0:
+                                        mon = ''
+                                        for i in range(len(x)-1, -1, -1):
+                                            mon = mon+x[i]
+                                        mon = mon+bima
 
                                     hoho = list(da)
                                     hoho[2] = '/'
@@ -1260,17 +3862,25 @@ def acceuil():
                                     e15.delete(0, END)
                                     e16.delete(0, END)
                                     topEdit.destroy()
-                                    if values[0].strip() != str(da) or values[2].strip() != str(ty) or values[3].strip() != str(no) or values[4].strip() != str(mon) or values[5].strip() != str(dé):
+                                    if values[0].strip() != str(da) or values[2].strip() != str(ty) or values[3].strip() != str(no) or values[4].strip() != str(mon) or values[5].strip() != str(dé) or values[7].strip() != str(att):
                                         tree.item(curItem, tags='green')
-                                        messagebox.showinfo(
-                                            title='Enregistrer', message='Donnée(s) modifiée(s) !')
                                         j = 0
                                         for fi in Dattta:
                                             if hadighirxhaha == fi[7]:
                                                 Dattta[j] = [tree.item(curItem, 'values')[0], tree.item(curItem, 'values')[1], tree.item(curItem, 'values')[2], tree.item(curItem, 'values')[
-                                                    3], tree.item(curItem, 'values')[4], tree.item(curItem, 'values')[5], tree.item(curItem, 'values')[6], tree.item(curItem, 'values')[7]]
+                                                    3], tree.item(curItem, 'values')[4], tree.item(curItem, 'values')[5], tree.item(curItem, 'values')[6], att.replace(att[2:4], da[6:8]).replace(att[5:7], da[3:5])]
                                             j += 1
+                                        stflhzak(my_tree)
 
+                                        def change_row_color_by_index(index):
+                                            if 0 <= index < len(tree.get_children()):
+                                                item_id = tree.get_children()[index]
+                                                tree.tag_configure("custom_tag", background="lightgreen")
+                                                tree.item(item_id, tags=("custom_tag",))
+                                        change_row_color_by_index(indexkhdr)
+
+                                        messagebox.showinfo(
+                                            title='Enregistrer', message='Donnée(s) modifiée(s) !')
                                     ope = 0
                                     return
                                 e9.insert(0, values[0])
@@ -1302,12 +3912,12 @@ def acceuil():
                                     topEdit, text='Enregistrer', command=lambda: insertData(my_tree))
                                 submitbutton.configure(
                                     font=('Times', 11, 'bold'), bg='green', fg='white')
-                                submitbutton.place(x=300, y=350)
+                                submitbutton.place(x=300, y=380)
                                 cancelbutton = Button(
                                     topEdit, text='Annulé', command=lambda: hantaTchouf())
                                 cancelbutton.configure(
                                     font=('Times', 11, 'bold'), bg='red', fg='white')
-                                cancelbutton.place(x=200, y=350)
+                                cancelbutton.place(x=200, y=380)
                                 topEdit.protocol(
                                     "WM_DELETE_WINDOW", hantaTchouf)
                                 topEdit.bind(
@@ -1332,32 +3942,124 @@ def acceuil():
 
                         def idcode(e):
                             global Dattta
-                            l27.configure(
-                                text='D-'+e20.get()[6: len(e20.get())]+'-'+e20.get()[3:5]+'-')
-                            if e20.get() == '':
-                                l27.configure(text='D-AA-MM-')
+                            if e == "C":
+                                C.configure(
+                                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                                P.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                S.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                D.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                            if e == "S":
+                                S.configure(
+                                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                                P.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                C.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                D.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                            if e == "D":
+                                D.configure(
+                                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                                C.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                S.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                P.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                            if e == "P":
+                                P.configure(
+                                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                                C.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                S.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                                D.configure(
+                                    font=('Times', 11, 'bold'), bg='blue', fg='white')
+                            compteD = 0 
+                            compteS = 0
+                            compteC=0
+                            compteP=0
+                            for lpo in range(len(Dattta)):
+                                if Dattta[lpo][7][0] == "D":
+                                    compteD = compteD + 1 
+                                if Dattta[lpo][7][0] == "S":
+                                    compteS = compteS + 1 
+                                if Dattta[lpo][7][0] == "P":
+                                    compteP = compteP + 1 
+                                if Dattta[lpo][7][0] == "C":
+                                    compteC = compteC + 1 
+                            if D.cget('bg') == 'blue' and C.cget('bg') == 'blue' and P.cget('bg') == 'blue' and S.cget('bg') == 'blue':
+                                l27.configure(
+                                    text='D-'+e20.get()[6: len(e20.get())]+'-'+e20.get()[3:5]+'-'+ str(compteD+1))
+                                if e20.get() == '':
+                                    l27.configure(text='D-AA-MM-'+ str(compteD+1))
+                            if D.cget('bg') == 'green':
+                                l27.configure(
+                                    text='D-'+e20.get()[6: len(e20.get())]+'-'+e20.get()[3:5]+'-'+ str(compteD+1))
+                                if e20.get() == '':
+                                    l27.configure(text='D-AA-MM-'+ str(compteD+1))
+                            if C.cget('bg') == 'green':
+                                l27.configure(
+                                    text='C-'+e20.get()[6: len(e20.get())]+'-'+e20.get()[3:5]+'-'+ str(compteC+1))
+                                if e20.get() == '':
+                                    l27.configure(text='C-AA-MM-'+ str(compteC+1))
+                            if P.cget('bg') == 'green':
+                                l27.configure(
+                                    text='P-'+e20.get()[6: len(e20.get())]+'-'+e20.get()[3:5]+'-'+ str(compteP+1))
+                                if e20.get() == '':
+                                    l27.configure(text='P-AA-MM-'+ str(compteP+1))
+                            if S.cget('bg') == 'green':
+                                l27.configure(
+                                    text='S-'+e20.get()[6: len(e20.get())]+'-'+e20.get()[3:5]+'-'+ str(compteS+1))
+                                if e20.get() == '':
+                                    l27.configure(text='S-AA-MM-'+ str(compteS+1))
 
                         topAdd = Toplevel()
                         topAdd.title("Ajouter")
-                        topAdd.geometry("500x400")
+                        topAdd.geometry("500x430")
                         topAdd.resizable(width=0, height=0)
                         icon = PhotoImage(file='logo-light.png')
                         window.tk.call('wm', 'iconphoto', topAdd._w, icon)
+
+                        D = Button(
+                            topAdd, text='D', command=lambda: idcode("D"))
+                        D.configure(
+                            font=('Times', 11, 'bold'), bg='green', fg='white')
+                        D.place(x=200, y=20)
+                        S = Button(
+                            topAdd, text='S', command=lambda: idcode("S"))
+                        S.configure(
+                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                        S.place(x=230, y=20)
+                        P = Button(
+                            topAdd, text='P', command=lambda: idcode("P"))
+                        P.configure(
+                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                        P.place(x=260, y=20)
+                        C = Button(
+                            topAdd, text='C', command=lambda: idcode("C"))
+                        C.configure(
+                            font=('Times', 11, 'bold'), bg='blue', fg='white')
+                        C.place(x=290, y=20)
+
                         l20 = Label(topAdd, text="Date", width=20,
                                     font=('Times', 11, 'bold'))
                         e20 = Entry(
                             topAdd, textvariable=Date, width=25)
-                        l20.place(x=50, y=30)
-                        e20.place(x=200, y=30)
+                        l20.place(x=50, y=60)
+                        e20.place(x=200, y=60)
                         l19 = Label(topAdd, text="Mois", width=20,
                                     font=('Times', 11, 'bold'))
                         e19 = Entry(
                             topAdd, textvariable=Mois, width=25)
-                        l19.place(x=50, y=70)
-                        e19.place(x=200, y=70)
+                        l19.place(x=50, y=100)
+                        e19.place(x=200, y=100)
                         l21 = Label(topAdd, text="Type", width=20,
                                     font=('Times', 11, 'bold'))
-                        
+
                         options = [
                             "VIREMENT PERMANENT",
                             "VIREMENT",
@@ -1365,50 +4067,51 @@ def acceuil():
                             "CARTE BANCAIRE",
                             "espèces".upper(),
                         ]
-                        
+
                         # datatype of menu text
                         clicked = StringVar()
-                        
+
                         # initial menu text
-                        clicked.set( "VIREMENT" )
-                        
+                        clicked.set("VIREMENT")
+
                         # Create Dropdown menu
-                        drop = OptionMenu( topAdd , clicked , *options )
-                        drop.place(x=200, y=105)
-                        l21.place(x=50, y=110)
+                        drop = OptionMenu(topAdd, clicked, *options)
+                        drop.place(x=200, y=135)
+                        l21.place(x=50, y=140)
                         l22 = Label(topAdd, text="Nom donneur d'ordre",
                                     width=20, font=('Times', 11, 'bold'))
                         e22 = Entry(
                             topAdd, textvariable=Nom, width=25)
-                        l22.place(x=50, y=150)
-                        e22.place(x=200, y=150)
+                        l22.place(x=50, y=180)
+                        e22.place(x=200, y=180)
                         l23 = Label(topAdd, text="Montant",
                                     width=20, font=('Times', 11, 'bold'))
                         e23 = Entry(
                             topAdd, textvariable=Montant, width=25)
-                        l23.place(x=50, y=190)
-                        e23.place(x=200, y=190)
+                        l23.place(x=50, y=220)
+                        e23.place(x=200, y=220)
                         l24 = Label(topAdd, text="Détail",
                                     width=20, font=('Times', 11, 'bold'))
                         e24 = Entry(
                             topAdd, textvariable=détail, width=25)
-                        l24.place(x=50, y=230)
-                        e24.place(x=200, y=230)
+                        l24.place(x=50, y=260)
+                        e24.place(x=200, y=260)
                         l25 = Label(topAdd, text="Montant en lettre",
                                     width=20, font=('Times', 11, 'bold'))
                         e25 = Entry(
                             topAdd, textvariable=Montant_en_lettre, width=25)
-                        l25.place(x=50, y=270)
-                        e25.place(x=200, y=270)
+                        l25.place(x=50, y=300)
+                        e25.place(x=200, y=300)
                         l26 = Label(topAdd, text="N° Attestation",
                                     width=20, font=('Times', 11, 'bold'))
-                        l27 = Label(topAdd, text="D-AA-MM-",
+                        compteD = 0 
+                        for lpo in range(len(Dattta)):
+                            if Dattta[lpo][7][0] == "D":
+                                compteD = compteD + 1 
+                        l27 = Label(topAdd, text="D-AA-MM-"+ str(compteD+1),
                                     width=20, font=('Times', 11, 'bold'))
-                        e26 = Entry(
-                            topAdd, textvariable=NAttestation, width=10)
-                        l26.place(x=50, y=310)
-                        l27.place(x=170, y=315)
-                        e26.place(x=300, y=310)
+                        l26.place(x=50, y=340)
+                        l27.place(x=170, y=345)
                         e20.focus()
                         e20.bind("<KeyRelease>", idcode)
                         e19.config(state='disabled')
@@ -1416,12 +4119,15 @@ def acceuil():
 
                         def adddData(tree):
                             global ope
-                            nonlocal e20, e19, e22, e23, e24, e25, e26
+                            nonlocal e20, e19, e22, e23, e24, e25, l27
                             global Dattta
                             global kn9lb3la
                             global bach
                             global changerowcolo
-                            kok=0
+                            global Organ 
+                            Organ = 5
+                            compteX = 0 
+                            kok = 0
                             da = Date.get().strip()
                             mo = Mois.get().strip()
                             ty = clicked.get().upper()
@@ -1429,8 +4135,19 @@ def acceuil():
                             mon = Montant.get().strip()
                             dé = détail.get().strip()
                             mol = Montant_en_lettre.get().strip()
-                            att = "".join(
-                                "D-"+da[6:8]+'-'+da[3:5]+'-'+NAttestation.get().strip())
+                            typeatt = l27.cget('text')
+                            if typeatt[0] == "D":
+                                att = "".join(
+                                    "D-"+da[6:8]+'-'+da[3:5]+'-'+NAttestation.get().strip())
+                            if typeatt[0] == "P":
+                                att = "".join(
+                                    "P-"+da[6:8]+'-'+da[3:5]+'-'+NAttestation.get().strip())
+                            if typeatt[0] == "S":
+                                att = "".join(
+                                    "S-"+da[6:8]+'-'+da[3:5]+'-'+NAttestation.get().strip())
+                            if typeatt[0] == "C":
+                                att = "".join(
+                                    "C-"+da[6:8]+'-'+da[3:5]+'-'+NAttestation.get().strip())
                             if mon == '' or da == '':
                                 messagebox.showinfo(
                                     title='Erreur !!', message="la date et le montant sont obligatoire pour enregistrer un paiement.", parent=topAdd)
@@ -1486,23 +4203,23 @@ def acceuil():
                                     title='Erreur !!', message="La date doit être sous la forme suivante :\n\n            'JJxMMxAA'", parent=topAdd)
                                 ope = 0
                                 return
-                            x=''
-                            mon=mon.replace('.','')
-                            if len(mon)>4 :
-                                bima=mon[len(mon)-3: len(mon)]
-                                mon=mon[0:len(mon)-3]
-                                for i in range(len(mon)-1,-1,-1) : 
-                                    if kok==3 or kok==6 or kok==9 or kok==12 or kok==15 or kok==18 or kok==21:
-                                        x=x+'.'
-                                        x= x+mon[i]
-                                    else : 
-                                        x= x+mon[i]
-                                    kok=kok+1
-                            if kok!=0 : 
-                                mon=''
-                                for i in range(len(x)-1,-1,-1):
-                                    mon=mon+x[i]
-                                mon=mon+bima
+                            x = ''
+                            mon = mon.replace('.', '')
+                            if len(mon) > 4:
+                                bima = mon[len(mon)-3: len(mon)]
+                                mon = mon[0:len(mon)-3]
+                                for i in range(len(mon)-1, -1, -1):
+                                    if kok == 3 or kok == 6 or kok == 9 or kok == 12 or kok == 15 or kok == 18 or kok == 21 or kok == 24 or kok == 27 or kok == 30 or kok == 33 or kok == 36  or kok == 39 or kok == 42:
+                                        x = x+'.'
+                                        x = x+mon[i]
+                                    else:
+                                        x = x+mon[i]
+                                    kok = kok+1
+                            if kok != 0:
+                                mon = ''
+                                for i in range(len(x)-1, -1, -1):
+                                    mon = mon+x[i]
+                                mon = mon+bima
                             hoho = list(da)
                             hoho[2] = '/'
                             hoho[5] = '/'
@@ -1536,6 +4253,11 @@ def acceuil():
                             hahoua = '%0d' % (int(hahia)+1)
                             j = 0
                             try:
+                                compteD = 0 
+                                compteS = 0
+                                compteC=0
+                                compteP=0
+                                compteX=0
                                 for li in range(len(Dattta)+1):
                                     if Dattta[li][7][8: len(Dattta[li][7])] == NAttestation.get().strip():
                                         j += 1
@@ -1547,9 +4269,27 @@ def acceuil():
                                             donothing = 0
                                     if j != 0 and j != 1:
                                         try:
-                                            Dattta[li][7] = 'D-'+Dattta[li][0][3:5]+'-' + \
-                                                Dattta[li][0][6:len(
-                                                    Dattta[li][0])]+'-'+str(li+1)
+                                            if Dattta[li][7][0] == "D":
+                                                compteD = compteD + 1 
+                                                Dattta[li][7] = 'D-'+Dattta[li][0][3:5]+'-' + \
+                                                    Dattta[li][0][6:len(
+                                                        Dattta[li][0])]+'-'+str(compteD)
+                                            if Dattta[li][7][0] == "S":
+                                                compteS = compteS + 1 
+                                                Dattta[li][7] = 'S-'+Dattta[li][0][3:5]+'-' + \
+                                                    Dattta[li][0][6:len(
+                                                        Dattta[li][0])]+'-'+str(compteS)
+                                            if Dattta[li][7][0] == "P":
+                                                compteP = compteP + 1 
+                                                Dattta[li][7] = 'P-'+Dattta[li][0][3:5]+'-' + \
+                                                    Dattta[li][0][6:len(
+                                                        Dattta[li][0])]+'-'+str(compteP)
+                                            if Dattta[li][7][0] == "C":
+                                                compteC = compteC + 1 
+                                                Dattta[li][7] = 'C-'+Dattta[li][0][3:5]+'-' + \
+                                                    Dattta[li][0][6:len(
+                                                        Dattta[li][0])]+'-'+str(compteC)
+
                                         except:
                                             donothing = 0
                             except:
@@ -1560,17 +4300,17 @@ def acceuil():
                                 if reloulo == 0:
                                     for i in Dattta:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
-                                    for u in tree.get_children():
-                                        if tree.item(u)["values"][7] == att:
-                                            tree.focus(u)
-                                            tree.selection_set(u)
+
                                 else:
                                     for parent in tree.get_children():
                                         tree.delete(parent)
@@ -1579,94 +4319,118 @@ def acceuil():
                                             for i in Dattta:
 
                                                 if kn9lb3la in i[0]:
-                                                    
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'mois':
                                             for i in Dattta:
                                                 if kn9lb3la in i[1]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'type':
                                             for i in Dattta:
                                                 if kn9lb3la in i[2]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'nom':
                                             for i in Dattta:
                                                 if kn9lb3la in i[3]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'montant':
                                             for i in Dattta:
                                                 if kn9lb3la in i[4]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'détail':
                                             for i in Dattta:
                                                 if kn9lb3la in i[5]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'mol':
                                             for i in Dattta:
                                                 if kn9lb3la in i[6]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'att':
                                             for i in Dattta:
                                                 if kn9lb3la in i[7]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                     except:
-                                        donothing = 0                                        
+                                        donothing = 0
+                                stflhzak(my_tree)
                                 if showpdf == 1:
                                     showPDF()
                                 e20.delete(0, END)
@@ -1674,7 +4438,6 @@ def acceuil():
                                 e23.delete(0, END)
                                 e24.delete(0, END)
                                 e25.delete(0, END)
-                                e26.delete(0, END)
                                 if changerowcolo == 1:
                                     changerowcolo = 0
                                     changerowcolor()
@@ -1687,25 +4450,46 @@ def acceuil():
                                     for o in range(len(my_tree.get_children())):
                                         if my_tree.item(my_tree.get_children()[o])["values"][7] == att:
                                             my_tree.focus_set()
-                                            my_tree.focus(my_tree.get_children()[o])
-                                            my_tree.selection_add(my_tree.get_children())
-                                            my_tree.selection_set(my_tree.get_children()[o])
+                                            my_tree.focus(
+                                                my_tree.get_children()[o])
+                                            my_tree.selection_add(
+                                                my_tree.get_children())
+                                            my_tree.selection_set(
+                                                my_tree.get_children()[o])
+                                stflhzak(my_tree)
                                 messagebox.showinfo(
                                     title='Enregistrer', message='Donnée(s) ajoutée(s) !')
-                                return    
+                                return
                             if j == 0:
-                                hana = [da, mo, ty, no, mon, dé, mol, "".join(
-                                    "D-"+da[6:8]+'-'+da[3:5]+'-'+hahoua)]
+                                for i in range(len(Dattta)) : 
+                                    if Dattta[i][7][0] == typeatt[0]:
+                                        compteX = compteX + 1 
+                                if typeatt[0] == "D":
+                                    hana = [da, mo, ty, no, mon, dé, mol, "".join(
+                                        "D-"+da[6:8]+'-'+da[3:5]+'-'+str(compteX+1))]
+                                if typeatt[0] == "P":
+                                    hana = [da, mo, ty, no, mon, dé, mol, "".join(
+                                        "P-"+da[6:8]+'-'+da[3:5]+'-'+str(compteX+1))]
+                                if typeatt[0] == "S":
+                                    hana = [da, mo, ty, no, mon, dé, mol, "".join(
+                                        "S-"+da[6:8]+'-'+da[3:5]+'-'+str(compteX+1))]
+                                if typeatt[0] == "C":
+                                    hana = [da, mo, ty, no, mon, dé, mol, "".join(
+                                        "C-"+da[6:8]+'-'+da[3:5]+'-'+str(compteX+1))]
                                 Dattta.append(hana)
                                 for parent in tree.get_children():
                                     tree.delete(parent)
                                 if reloulo != 1:
                                     for i in Dattta:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                         mytag = 'normal'
@@ -1715,90 +4499,114 @@ def acceuil():
                                             for i in Dattta:
                                                 if kn9lb3la in i[0]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'mois':
                                             for i in Dattta:
                                                 if kn9lb3la in i[1]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'type':
                                             for i in Dattta:
                                                 if kn9lb3la in i[2]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'nom':
                                             for i in Dattta:
                                                 if kn9lb3la in i[3]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'montant':
                                             for i in Dattta:
                                                 if kn9lb3la in i[4]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'détail':
                                             for i in Dattta:
                                                 if kn9lb3la in i[5]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'mol':
                                             for i in Dattta:
                                                 if kn9lb3la in i[6]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                         if bach == 'att':
                                             for i in Dattta:
                                                 if kn9lb3la in i[7]:
                                                     mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                        mytag = 'red'
+                                                    if i[7][0] == 'P':
+                                                        mytag = 'orange'
+                                                    if i[7][0] == 'C':
+                                                        mytag = 'brown'
+                                                    if i[7][0] == 'D':
+                                                        mytag = 'normal'
+                                                    if i[7][0] == 'S':
+                                                        mytag = 'yellow'
                                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
                                     except:
                                         donothing = 0
                             if showpdf == 1:
@@ -1808,7 +4616,6 @@ def acceuil():
                             e23.delete(0, END)
                             e24.delete(0, END)
                             e25.delete(0, END)
-                            e26.delete(0, END)
                             if changerowcolo == 1:
                                 changerowcolo = 0
                                 changerowcolor()
@@ -1821,9 +4628,13 @@ def acceuil():
                                 for o in range(len(my_tree.get_children())):
                                     if my_tree.item(my_tree.get_children()[o])["values"][7] == "".join("D-"+da[6:8]+'-'+da[3:5]+'-'+hahoua):
                                         my_tree.focus_set()
-                                        my_tree.focus(my_tree.get_children()[o])
-                                        my_tree.selection_add(my_tree.get_children())
-                                        my_tree.selection_set(my_tree.get_children()[o])
+                                        my_tree.focus(
+                                            my_tree.get_children()[o])
+                                        my_tree.selection_add(
+                                            my_tree.get_children())
+                                        my_tree.selection_set(
+                                            my_tree.get_children()[o])
+                            stflhzak(my_tree)
                             messagebox.showinfo(
                                 title='Enregistrer', message='Donnée(s) ajoutée(s) !')
                             return
@@ -1836,18 +4647,17 @@ def acceuil():
                             e23.delete(0, END)
                             e24.delete(0, END)
                             e25.delete(0, END)
-                            e26.delete(0, END)
                             topAdd.destroy()
                         submitbutton = Button(
                             topAdd, text='Enregistrer', command=lambda: adddData(my_tree))
                         submitbutton.configure(
                             font=('Times', 11, 'bold'), bg='green', fg='white')
-                        submitbutton.place(x=300, y=350)
+                        submitbutton.place(x=300, y=380)
                         cancelbutton = Button(
                             topAdd, text='Annulé', command=lambda: hantaTchouf())
                         cancelbutton.configure(
                             font=('Times', 11, 'bold'), bg='red', fg='white')
-                        cancelbutton.place(x=200, y=350)
+                        cancelbutton.place(x=200, y=380)
                         topAdd.protocol(
                             "WM_DELETE_WINDOW", hantaTchouf)
                         topAdd.bind(
@@ -1859,19 +4669,60 @@ def acceuil():
 
                     return
 
+                def stflhzak(tree):
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    lololo = tree.selection()
+                    for i in lololo:
+                        compteD = 0 
+                        compteS = 0
+                        compteC=0
+                        compteP=0
+                        for lpo in range(len(Dattta)):
+                            try:
+                                if Dattta[lpo][7][0] == "D":
+                                    compteD = compteD + 1 
+                                    Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
+                                        Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteD)
+                                if Dattta[lpo][7][0] == "S":
+                                    compteS = compteS + 1
+                                    Dattta[lpo][7] = 'S-'+Dattta[lpo][0][6:len(
+                                        Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteS)
+                                if Dattta[lpo][7][0] == "P":
+                                    compteP = compteP + 1
+                                    Dattta[lpo][7] = 'P-'+Dattta[lpo][0][6:len(
+                                        Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteP)
+                                if Dattta[lpo][7][0] == "C":
+                                    compteC = compteC + 1
+                                    Dattta[lpo][7] = 'C-'+Dattta[lpo][0][6:len(
+                                        Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteC)
+                            except:
+                                donothing = 0
+                    for parent in tree.get_children():
+                        tree.delete(parent)
+                    if changerowcolo == 1:
+                        changerowcolo = 0
+                        changerowcolor()
+                    else:
+                        changerowcolo = 1
+                        changerowcolor()
+
                 def deleteData(tree):
                     global ope
                     global Dattta
+                    global changerowcolo
                     global kn9lb3la
                     global reloulo
-                    global changerowcolo
                     global bach
 
                     if ope == 0:
+                        ope = 1
                         if len(tree.selection()) > 0:
-                            ope = 1
                             sur = messagebox.askquestion(
-                                'les données seront perdues !', "êtes-vous sûr de vouloir supprimer cette ligne ?", icon='warning')
+                                'les données seront perdues !', "êtes-vous sûr de vouloir supprimer la (les) ligne(s) séléctionnée(s)?", icon='warning')
                             if sur == 'yes':
                                 lololo = tree.selection()
                                 for i in lololo:
@@ -1887,183 +4738,44 @@ def acceuil():
                                                 Dattta.remove(Dattta[j])
                                                 l9it = 1
                                         j += 1
+                            
                                 for i in lololo:
+                                    compteD = 0 
+                                    compteS = 0
+                                    compteC=0
+                                    compteP=0
                                     for lpo in range(len(Dattta)):
                                         try:
-                                            Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
-                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(lpo+1)
+                                            if Dattta[lpo][7][0] == "D":
+                                                compteD = compteD + 1 
+                                                Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
+                                                    Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteD)
+                                            if Dattta[lpo][7][0] == "S":
+                                                compteS = compteS + 1
+                                                Dattta[lpo][7] = 'S-'+Dattta[lpo][0][6:len(
+                                                    Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteS)
+                                            if Dattta[lpo][7][0] == "P":
+                                                compteP = compteP + 1
+                                                Dattta[lpo][7] = 'P-'+Dattta[lpo][0][6:len(
+                                                    Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteP)
+                                            if Dattta[lpo][7][0] == "C":
+                                                compteC = compteC + 1
+                                                Dattta[lpo][7] = 'C-'+Dattta[lpo][0][6:len(
+                                                    Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteC)
                                         except:
                                             donothing = 0
-
                                 for parent in tree.get_children():
                                     tree.delete(parent)
-                                if reloulo == 0:
-                                    for i in Dattta:
-                                        mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                            mytag = 'red'
-                                        tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
-                                    if changerowcolo == 1:
-                                        changerowcolo = 0
-                                        changerowcolor()
-                                    else:
-                                        changerowcolo = 1
-                                        changerowcolor()
+                                if changerowcolo == 1:
+                                    changerowcolo = 0
+                                    changerowcolor()
                                 else:
-
-                                    try:
-                                        if bach == 'date':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[0]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                        if bach == 'mois':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[1]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                        if bach == 'type':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[2]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                        if bach == 'nom':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[3]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                        if bach == 'montant':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[4]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                        if bach == 'détail':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[5]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                        if bach == 'mol':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[6]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                        if bach == 'att':
-                                            for i in Dattta:
-                                                if kn9lb3la in i[7]:
-                                                    mytag = 'normal'
-                                                    if i[2] == 'CARTE BANCAIRE':
-                                                        mytag = 'blue'
-                                                    if i[2] != 'CARTE BANCAIRE' and (i[3] == '' or i[3] == ' '):
-                                                        mytag = 'red'
-                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                    mytag = 'normal'
-                                            if changerowcolo == 1:
-                                                changerowcolo = 0
-                                                changerowcolor()
-                                            else:
-                                                changerowcolo = 1
-                                                changerowcolor()
-                                    except:
-                                        donothing = 0
-
-                            ope = 0
-                            children = my_tree.get_children()
-                            if children:
-                                my_tree.focus(children[0])
-                                my_tree.selection_set(children[0])
-                                my_tree.selection_add(children[0])
+                                    changerowcolo = 1
+                                    changerowcolor()
                         else:
                             messagebox.showinfo(
-                                title='!!', message='Merci de selectionner les lignes à supprimer')
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à supprimer')
+                        ope = 0
 
                 def menuRecherch():
                     global rech
@@ -2656,6 +5368,7 @@ def acceuil():
                                 global bach
                                 global changerowcolo
                                 global reloulou
+                                global Organ
                                 movedown.config(state='normal')
                                 moveup.config(state='normal')
                                 ka = 0
@@ -2665,10 +5378,14 @@ def acceuil():
                                     tree.delete(parent)
                                 for i in Dattta:
                                     mytag = 'normal'
-                                    if i[2] == 'CARTE BANCAIRE':
-                                        mytag = 'blue'
-                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                        mytag = 'red'
+                                    if i[7][0] == 'P':
+                                        mytag = 'orange'
+                                    if i[7][0] == 'C':
+                                        mytag = 'brown'
+                                    if i[7][0] == 'D':
+                                        mytag = 'normal'
+                                    if i[7][0] == 'S':
+                                        mytag = 'yellow'
                                     my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                         i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                     mytag = 'normal'
@@ -2681,7 +5398,15 @@ def acceuil():
                                 else:
                                     changerowcolo = 1
                                     changerowcolor()
-
+                                if Organ == 1 : 
+                                    Organ = 0
+                                elif Organ == 2 : 
+                                    Organ = 1
+                                elif Organ == 3 : 
+                                    Organ = 2
+                                elif Organ == 0 : 
+                                    Organ = 3
+                                organiser(my_tree)
                             if deb == 1:
                                 if showpdf == 1:
                                     showPDF()
@@ -2698,13 +5423,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[0]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'date'
                                 if ka == 1:
@@ -2715,7 +5443,7 @@ def acceuil():
                                             frame1, text='<-', command=lambda: rj3Data(my_tree))
                                         reloulou.place(x=0, y=137)
                                         reloulo = 1
-                                        
+
                                 else:
                                     rech = 1
                                     c1.select()
@@ -2744,13 +5472,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[1]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'mois'
                                 if ka == 1:
@@ -2788,13 +5519,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[2]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'type'
                                 if ka == 1:
@@ -2832,13 +5566,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[3]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'nom'
                                 if ka == 1:
@@ -2876,13 +5613,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[4]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'montant'
                                 if ka == 1:
@@ -2920,13 +5660,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[5]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'détail'
                                 if ka == 1:
@@ -2964,13 +5707,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[6]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'mol'
                                 if ka == 1:
@@ -3008,13 +5754,16 @@ def acceuil():
                                 for i in Dattta:
                                     if kn9lb3la in i[7]:
                                         mytag = 'normal'
-                                        if i[2] == 'CARTE BANCAIRE':
-                                            mytag = 'blue'
-                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                            mytag = 'red'
+                                        if i[7][0] == 'P':
+                                            mytag = 'orange'
+                                        if i[7][0] == 'C':
+                                            mytag = 'brown'
+                                        if i[7][0] == 'D':
+                                            mytag = 'normal'
+                                        if i[7][0] == 'S':
+                                            mytag = 'yellow'
                                         my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                             i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                        mytag = 'normal'
                                         ka = 1
                                         bach = 'att'
                                 if ka == 1:
@@ -3060,6 +5809,7 @@ def acceuil():
                     global bach
                     global reloulo
                     global changerowcolo
+                    global Organ
                     if changerowcolo == 0:
                         for parent in my_tree.get_children():
                             my_tree.delete(parent)
@@ -3069,10 +5819,10 @@ def acceuil():
                                     mytag = 'gray'
                                 else:
                                     mytag = 'normal'
-                                if i[2] == 'CARTE BANCAIRE':
-                                    mytag = 'blue'
-                                if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                if i[3] == '' or i[3] == ' ':
                                     mytag = 'red'
+                                if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                    mytag = 'pink'
                                 my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                     i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                         else:
@@ -3084,10 +5834,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                 if bach == 'mois':
@@ -3097,10 +5847,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                 if bach == 'type':
@@ -3110,10 +5860,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                 if bach == 'nom':
@@ -3123,10 +5873,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                 if bach == 'montant':
@@ -3136,10 +5886,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                 if bach == 'détail':
@@ -3149,10 +5899,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                 if bach == 'mol':
@@ -3162,10 +5912,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                                 if bach == 'att':
@@ -3175,10 +5925,10 @@ def acceuil():
                                                 mytag = 'gray'
                                             else:
                                                 mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
+                                            if i[3] == '' or i[3] == ' ':
                                                 mytag = 'red'
+                                            if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                                mytag = 'pink'
                                             my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                                 i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                             except:
@@ -3189,98 +5939,32 @@ def acceuil():
                         for parent in my_tree.get_children():
                             my_tree.delete(parent)
                         if reloulo == 0:
+                            my_tree.tag_configure('yellow', background = 'yellow')
+                            my_tree.tag_configure('orange', background = 'orange')
+                            my_tree.tag_configure('brown', background='brown')
+                            my_tree.tag_configure('purple', background='pink')
                             for i in Dattta:
                                 mytag = 'normal'
-                                if i[2] == 'CARTE BANCAIRE':
-                                    mytag = 'blue'
-                                if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                    mytag = 'red'
+                                if i[7][0] == 'P':
+                                    mytag = 'orange'
+                                if i[7][0] == 'C':
+                                    mytag = 'brown'
+                                if i[7][0] == 'D':
+                                    mytag = 'normal'
+                                if i[7][0] == 'S':
+                                    mytag = 'yellow'
                                 my_tree.insert(parent='', index='end', iid=i, text=i, values=(
                                     i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
                         else:
-                            try:
-                                if bach == 'date':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[0]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                if bach == 'mois':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[1]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                if bach == 'type':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[2]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                if bach == 'nom':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[3]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                if bach == 'montant':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[4]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                if bach == 'détail':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[5]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                if bach == 'mol':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[6]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                if bach == 'att':
-                                    for i in Dattta:
-                                        if kn9lb3la in i[7]:
-                                            mytag = 'normal'
-                                            if i[2] == 'CARTE BANCAIRE':
-                                                mytag = 'blue'
-                                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                mytag = 'red'
-                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                            except:
-                                donothing = 0
+                            if Organ == 1 : 
+                                Organ = 0
+                            elif Organ == 2 : 
+                                Organ = 1
+                            elif Organ == 3 : 
+                                Organ = 2
+                            elif Organ == 0 : 
+                                Organ = 3
+                            organiser(my_tree)
                         changerowcolo = 0
                     return
 
@@ -3299,87 +5983,247 @@ def acceuil():
                         mselec = 0
 
                 def up():
+                    global changerowcolo
                     global ope
-                    ope = 1
-                    Dattta = []
-                    x = []
-                    rows = my_tree.selection()
-                    if len(my_tree.selection()) < 1:
-                        messagebox.showinfo(
-                            title='Erreur !!', message='Merci de selectionner une ou plusieurs lignes. ')
-                    else:
-                        for row in rows:
-                            my_tree.move(row, my_tree.parent(
-                                row), my_tree.index(row)-1)
-                            x.append(my_tree.index(row)-1)
-                        for parent in my_tree.get_children():
-                            Dattta.append(my_tree.item(parent)["values"])
-                        for lpo in range(len(Dattta)):
-                            try:
-                                Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
-                                    Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(lpo+1)
-                            except:
-                                donothing = 0
-                        for parent in my_tree.get_children():
-                            my_tree.delete(parent)
-                        for i in Dattta:
-                            mytag = 'normal'
-                            if i[2] == 'CARTE BANCAIRE':
-                                mytag = 'blue'
-                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                mytag = 'red'
-                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                            mytag = 'normal'
-                        for i in x:
-                            if children:
-                                my_tree.selection_add(
-                                    my_tree.get_children()[i+1])
-                                my_tree.focus_set()
-                                my_tree.focus(my_tree.get_children()[i+1])
-                    ope = 0
+                    global Dattta
+                    global Organ 
+                    Organ = 5
+
+                    if ope == 0:
+                        ope = 1
+                        Dattta = []
+                        x = []
+                        rows = my_tree.selection()
+                        if len(my_tree.selection()) < 1:
+                            messagebox.showinfo(
+                                title='Erreur !!', message='Merci de selectionner une ou plusieurs lignes. ')
+                        else:
+                            if changerowcolo == 0:
+                                for row in rows:
+                                    my_tree.move(row, my_tree.parent(
+                                        row), my_tree.index(row)-1)
+                                    x.append(my_tree.index(row)-1)
+                                for parent in my_tree.get_children():
+                                    Dattta.append(my_tree.item(parent)["values"])
+                                compteD = 0 
+                                compteS = 0
+                                compteC=0
+                                compteP=0
+                                for lpo in range(len(Dattta)):
+                                    try:
+                                        if Dattta[lpo][7][0] == "D":
+                                            compteD = compteD + 1 
+                                            Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteD)
+                                        if Dattta[lpo][7][0] == "S":
+                                            compteS = compteS + 1 
+                                            Dattta[lpo][7] = 'S-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteS)
+                                        if Dattta[lpo][7][0] == "P":
+                                            compteP = compteP + 1 
+                                            Dattta[lpo][7] = 'P-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteP)
+                                        if Dattta[lpo][7][0] == "C":
+                                            compteC = compteC + 1 
+                                            Dattta[lpo][7] = 'C-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteC)
+                                    except:
+                                        donothing = 0
+                                for parent in my_tree.get_children():
+                                    my_tree.delete(parent)
+                                for i in Dattta:
+                                    mytag = 'normal'
+                                    if i[7][0] == 'P':
+                                        mytag = 'orange'
+                                    if i[7][0] == 'C':
+                                        mytag = 'brown'
+                                    if i[7][0] == 'D':
+                                        mytag = 'normal'
+                                    if i[7][0] == 'S':
+                                        mytag = 'yellow'
+                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    mytag = 'normal'
+                                for i in x:
+                                    if children:
+                                        my_tree.selection_add(
+                                            my_tree.get_children()[i+1])
+                                        my_tree.focus_set()
+                                        my_tree.focus(my_tree.get_children()[i+1])
+                            else:
+                                for row in rows:
+                                    my_tree.move(row, my_tree.parent(
+                                        row), my_tree.index(row)-1)
+                                    x.append(my_tree.index(row)-1)
+                                for parent in my_tree.get_children():
+                                    Dattta.append(my_tree.item(parent)["values"])
+                                compteD = 0 
+                                compteS = 0
+                                compteC=0
+                                compteP=0
+                                for lpo in range(len(Dattta)):
+                                    try:
+                                        if Dattta[lpo][7][0] == "D":
+                                            compteD = compteD + 1 
+                                            Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteD)
+                                        if Dattta[lpo][7][0] == "S":
+                                            compteS = compteS + 1 
+                                            Dattta[lpo][7] = 'S-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteS)
+                                        if Dattta[lpo][7][0] == "P":
+                                            compteP = compteP + 1 
+                                            Dattta[lpo][7] = 'P-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteP)
+                                        if Dattta[lpo][7][0] == "C":
+                                            compteC = compteC + 1 
+                                            Dattta[lpo][7] = 'C-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteC)
+                                    except:
+                                        donothing = 0
+                                for parent in my_tree.get_children():
+                                    my_tree.delete(parent)
+                                mytag = 'normal'
+                                for i in Dattta:
+                                    if mytag == 'normal':
+                                        mytag = 'gray'
+                                    else:
+                                        mytag = 'normal'
+                                    if  i[3] == ' ' or i[3] == '':
+                                        mytag = 'red'
+                                    if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                        mytag = 'pink'
+                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in x:
+                                    if children:
+                                        my_tree.selection_add(
+                                            my_tree.get_children()[i+1])
+                                        my_tree.focus_set()
+                                        my_tree.focus(my_tree.get_children()[i+1])
+                        ope = 0
                     return
 
                 def down():
+                    global changerowcolo
                     global ope
-                    ope = 1
-                    Dattta = []
-                    x = []
-                    rows = my_tree.selection()
-                    if len(my_tree.selection()) < 1:
-                        messagebox.showinfo(
-                            title='Erreur !!', message='Merci de selectionner une ou plusieurs lignes. ')
-                    else:
-                        for row in reversed(rows):
-                            my_tree.move(row, my_tree.parent(
-                                row), my_tree.index(row)+1)
-                            x.append(my_tree.index(row)+1)
-                        for parent in my_tree.get_children():
-                            Dattta.append(my_tree.item(parent)["values"])
-                        for lpo in range(len(Dattta)):
-                            try:
-                                Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
-                                    Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(lpo+1)
-                            except:
-                                donothing = 0
-                        for parent in my_tree.get_children():
-                            my_tree.delete(parent)
-                        for i in Dattta:
-                            mytag = 'normal'
-                            if i[2] == 'CARTE BANCAIRE':
-                                mytag = 'blue'
-                            if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                mytag = 'red'
-                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                            mytag = 'normal'
-                        for i in x:
-                            if children:
-                                my_tree.selection_add(
-                                    my_tree.get_children()[i-1])
-                                my_tree.focus_set()
-                                my_tree.focus(my_tree.get_children()[i-1])
-                    ope = 0
+                    global Dattta
+                    global Organ 
+                    Organ = 5
+                    if ope == 0:
+                        ope = 1
+                        Dattta = []
+                        x = []
+                        rows = my_tree.selection()
+                        if len(my_tree.selection()) < 1:
+                            messagebox.showinfo(
+                                title='Erreur !!', message='Merci de selectionner une ou plusieurs lignes. ')
+                        else:
+                            if changerowcolo == 0:
+                                for row in reversed(rows):
+                                    my_tree.move(row, my_tree.parent(
+                                        row), my_tree.index(row)+1)
+                                    x.append(my_tree.index(row)+1)
+                                for parent in my_tree.get_children():
+                                    Dattta.append(my_tree.item(parent)["values"])
+                                compteD = 0 
+                                compteS = 0
+                                compteC=0
+                                compteP=0
+                                for lpo in range(len(Dattta)):
+                                    try:
+                                        if Dattta[lpo][7][0] == "D":
+                                            compteD = compteD + 1 
+                                            Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteD)
+                                        if Dattta[lpo][7][0] == "S":
+                                            compteS = compteS + 1 
+                                            Dattta[lpo][7] = 'S-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteS)
+                                        if Dattta[lpo][7][0] == "P":
+                                            compteP = compteP + 1 
+                                            Dattta[lpo][7] = 'P-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteP)
+                                        if Dattta[lpo][7][0] == "C":
+                                            compteC = compteC + 1 
+                                            Dattta[lpo][7] = 'C-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteC)
+                                    except:
+                                        donothing = 0
+                                for parent in my_tree.get_children():
+                                    my_tree.delete(parent)
+                                for i in Dattta:
+                                    mytag = 'normal'
+                                    if i[7][0] == 'P':
+                                        mytag = 'orange'
+                                    if i[7][0] == 'C':
+                                        mytag = 'brown'
+                                    if i[7][0] == 'D':
+                                        mytag = 'normal'
+                                    if i[7][0] == 'S':
+                                        mytag = 'yellow'
+                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                    mytag = 'normal'
+                                for i in x:
+                                    if children:
+                                        my_tree.selection_add(
+                                            my_tree.get_children()[i-1])
+                                        my_tree.focus_set()
+                                        my_tree.focus(my_tree.get_children()[i-1])
+                            else : 
+                                for row in reversed(rows):
+                                    my_tree.move(row, my_tree.parent(
+                                        row), my_tree.index(row)+1)
+                                    x.append(my_tree.index(row)+1)
+                                for parent in my_tree.get_children():
+                                    Dattta.append(my_tree.item(parent)["values"])
+                                for parent in my_tree.get_children():
+                                    my_tree.delete(parent)
+                                compteD = 0 
+                                compteS = 0
+                                compteC=0
+                                compteP=0
+                                for lpo in range(len(Dattta)):
+                                    try:
+                                        if Dattta[lpo][7][0] == "D":
+                                            compteD = compteD + 1 
+                                            Dattta[lpo][7] = 'D-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteD)
+                                        if Dattta[lpo][7][0] == "S":
+                                            compteS = compteS + 1 
+                                            Dattta[lpo][7] = 'S-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteS)
+                                        if Dattta[lpo][7][0] == "P":
+                                            compteP = compteP + 1 
+                                            Dattta[lpo][7] = 'P-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteP)
+                                        if Dattta[lpo][7][0] == "C":
+                                            compteC = compteC + 1 
+                                            Dattta[lpo][7] = 'C-'+Dattta[lpo][0][6:len(
+                                                Dattta[lpo][0])]+'-' + Dattta[lpo][0][3:5]+'-'+str(compteC)
+                                    except:
+                                        donothing = 0
+                                mytag = 'normal'
+                                for i in Dattta:
+                                    if mytag == 'normal':
+                                        mytag = 'gray'
+                                    else:
+                                        mytag = 'normal'
+                                    if  i[3] == ' ' or i[3] == '':
+                                        mytag = 'red'
+                                    if not re.match(r'^\d{2}/\d{2}/\d{2}$', i[0]) : 
+                                        mytag = 'pink'
+                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                for i in x:
+                                    if children:
+                                        my_tree.selection_add(
+                                            my_tree.get_children()[i-1])
+                                        my_tree.focus_set()
+                                        my_tree.focus(my_tree.get_children()[i-1])
+                        ope = 0
+                    
                     return
 
                 def idin():
@@ -3390,6 +6234,22 @@ def acceuil():
                         values = my_tree.item(curItem, "values")
                         if len(my_tree.selection()) < 2:
                             if len(curItem) > 0:
+                                if values[7][0] == "D":
+                                    Natt = "D-" + \
+                                        values[0][6:len(values[0])] + \
+                                        '-'+values[0][3:5]+'-'
+                                if values[7][0] == "P":
+                                    Natt = "P-" + \
+                                        values[0][6:len(values[0])] + \
+                                        '-'+values[0][3:5]+'-'
+                                if values[7][0] == "C":
+                                    Natt = "C-" + \
+                                        values[0][6:len(values[0])] + \
+                                        '-'+values[0][3:5]+'-'
+                                if values[7][0] == "S":
+                                    Natt = "S-" + \
+                                        values[0][6:len(values[0])] + \
+                                        '-'+values[0][3:5]+'-'
                                 TopIdin = Toplevel()
                                 TopIdin.title("Modification de l'ID")
                                 TopIdin.geometry("300x150")
@@ -3399,7 +6259,7 @@ def acceuil():
                                 TopIdin.resizable(width=0, height=0)
                                 l60 = Label(TopIdin, text="Merci de saisir le nouveau numéro \nd'attestation pour ce paiement.",
                                             font=('Times', 11, 'bold'))
-                                l61 = Label(TopIdin, text="D-"+values[0][6:len(values[0])]+'-'+values[0][3:5]+'-',
+                                l61 = Label(TopIdin, text=Natt,
                                             font=('Times', 11, 'bold'))
                                 e60 = Entry(
                                     TopIdin, textvariable=Date, width=5)
@@ -3415,216 +6275,265 @@ def acceuil():
                                     TopIdin.destroy()
 
                                 def changeID():
+                                    compteX = 0
+                                    global changerowcolo
                                     global ope
+                                    global Organ 
+                                    Organ = 5
                                     j = 0
-                                    sup = Dattta[len(
-                                        Dattta)-1][7][8:len(Dattta[len(Dattta)-1][7])]
-                                    inf = Dattta[0][7][8:len(Dattta[0][7])]
                                     e600 = e60.get()
                                     try:
-                                        if int(e600) <= int(sup) and int(e600) >= int(inf):
-                                            try:
-                                                for li in range(len(Dattta)):
-                                                    if j == 1:
-                                                        break
-                                                    if Dattta[li][7][8: len(Dattta[li][7])] == e60.get():
-                                                        j += 1
-                                                        try:
-                                                            x = [Dattta[li][0], Dattta[li][1], Dattta[li][2], Dattta[li][3],
-                                                                 Dattta[li][4], Dattta[li][5], Dattta[li][6], Dattta[li][7]]
-                                                            del Dattta[li]
+                                        for i in range(len(Dattta)) :
+                                            if Dattta[i][7][0] == values[7][0] : 
+                                                compteX=compteX+1
+                                        
+                                        if compteX >0:
+                                            if int(e600) <= compteX:
+                                                try:
+                                                    for li in range(len(Dattta)):
+                                                        if j == 1:
+                                                            break
+                                                        if Dattta[li][7][8: len(Dattta[li][7])] == e60.get() and Dattta[li][7][0]== values[7][0]:
+                                                            j += 1
+                                                            try:
+                                                                x = [Dattta[li][0], Dattta[li][1], Dattta[li][2], Dattta[li][3],
+                                                                    Dattta[li][4], Dattta[li][5], Dattta[li][6], Dattta[li][7]]
+                                                                del Dattta[li]
+                                                                Dattta.insert(
+                                                                    li, [values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7][0:8]+e60.get()])
+                                                            except:
+                                                                donothing = 0
+                                                    for z in range(len(Dattta)):
+                                                        if values[7] == Dattta[z][7]:
+                                                            del Dattta[z]
                                                             Dattta.insert(
-                                                                li, [values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7][0:8]+e60.get()])
-                                                        except:
-                                                            donothing = 0
-                                                for z in range(len(Dattta)):
-                                                    if values[7] == Dattta[z][7]:
-                                                        del Dattta[z]
-                                                        Dattta.insert(
-                                                            z, [x[0], x[1], x[2], x[3], x[4], x[5], x[6], values[7]])
-                                                        break
+                                                                z, [x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7][0:8]+values[7][8:len(values[7])]])
+                                                            break
 
-                                            except:
-                                                donothing = 0
-                                            if j != 0:
-                                                for parent in my_tree.get_children():
-                                                    my_tree.delete(parent)
-                                                if reloulo == 0:
-                                                    for i in Dattta:
-                                                        mytag = 'normal'
-                                                        if i[2] == 'CARTE BANCAIRE':
-                                                            mytag = 'blue'
-                                                        if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                            mytag = 'red'
-                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                        mytag = 'normal'
-                                                    for u in my_tree.get_children():
-                                                        if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                            my_tree.focus(u)
-                                                            my_tree.selection_set(
-                                                                u)
-                                                    hantaTchouf()
-                                                else:
+                                                except:
+                                                    donothing = 0
+                                                if j != 0:
                                                     for parent in my_tree.get_children():
                                                         my_tree.delete(parent)
-                                                    try:
-                                                        if bach == 'date':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[0]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                        if bach == 'mois':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[1]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                        if bach == 'type':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[2]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                        if bach == 'nom':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[3]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                        if bach == 'montant':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[4]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                        if bach == 'détail':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[5]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                        if bach == 'mol':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[6]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                        if bach == 'att':
-                                                            for i in Dattta:
-                                                                if kn9lb3la in i[7]:
-                                                                    mytag = 'normal'
-                                                                    if i[2] == 'CARTE BANCAIRE':
-                                                                        mytag = 'blue'
-                                                                    if i[2] != 'CARTE BANCAIRE' and i[3] == '':
-                                                                        mytag = 'red'
-                                                                    my_tree.insert(parent='', index='end', iid=i, text=i, values=(
-                                                                        i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
-                                                                    mytag = 'normal'
-                                                            for u in my_tree.get_children():
-                                                                if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
-                                                                    my_tree.focus(
-                                                                        u)
-                                                                    my_tree.selection_set(
-                                                                        u)
-                                                            hantaTchouf()
-                                                    except:
-                                                        donothing = 0
+                                                    if reloulo == 0:
+                                                        for i in Dattta:
+                                                            mytag = 'normal'
+                                                            if i[7][0] == 'P':
+                                                                mytag = 'orange'
+                                                            if i[7][0] == 'C':
+                                                                mytag = 'brown'
+                                                            if i[7][0] == 'D':
+                                                                mytag = 'normal'
+                                                            if i[7][0] == 'S':
+                                                                mytag = 'yellow'
+                                                            my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                            mytag = 'normal'
+                                                        for u in my_tree.get_children():
+                                                            if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                my_tree.focus(u)
+                                                                my_tree.selection_set(
+                                                                    u)
+                                                        hantaTchouf()
+                                                        
+                                                    else:
+                                                        for parent in my_tree.get_children():
+                                                            my_tree.delete(parent)
+                                                        try:
+                                                            if bach == 'date':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[0]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            if bach == 'mois':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[1]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            if bach == 'type':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[2]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            if bach == 'nom':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[3]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            if bach == 'montant':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[4]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            if bach == 'détail':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[5]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            if bach == 'mol':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[6]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            if bach == 'att':
+                                                                for i in Dattta:
+                                                                    if kn9lb3la in i[7]:
+                                                                        mytag = 'normal'
+                                                                        if i[7][0] == 'P':
+                                                                            mytag = 'orange'
+                                                                        if i[7][0] == 'C':
+                                                                            mytag = 'brown'
+                                                                        if i[7][0] == 'D':
+                                                                            mytag = 'normal'
+                                                                        if i[7][0] == 'S':
+                                                                            mytag = 'yellow'
+                                                                        my_tree.insert(parent='', index='end', iid=i, text=i, values=(
+                                                                            i[0], i[1], i[2], i[3], i[4], i[5], i[6], i[7]), tags=(mytag))
+                                                                for u in my_tree.get_children():
+                                                                    if my_tree.item(u)["values"][7][8:len(my_tree.item(u)["values"][7])] == e60.get():
+                                                                        my_tree.focus(
+                                                                            u)
+                                                                        my_tree.selection_set(
+                                                                            u)
+                                                                hantaTchouf()
+                                                            
+                                                        except:
+                                                            donothing = 0
+                                                stflhzak(my_tree)
+                                            else : 
+                                                messagebox.showinfo(
+                                                    title='Invalide !!', message='Pour les paiements de type "' + values[7][0] +'" merci de saisir un numéro entre 1'+' et '+ str(compteX)+'.', parent=TopIdin)
+                                                ope = 1
+                                                e60.delete(0, END)
                                         else:
                                             messagebox.showinfo(
-                                                title='Invalide !!', message='Merci de saisir un numéro entre '+Dattta[0][7][8:len(Dattta[0][7])]+' et '+Dattta[len(Dattta)-1][7][8:len(Dattta[len(Dattta)-1][7])], parent=TopIdin)
+                                                title='Invalide !!', message='Pour les paiements de type "' + values[7][0] +'" merci de saisir un numéro entre 1'+' et '+ str(compteX)+'.', parent=TopIdin)
                                             ope = 1
                                             e60.delete(0, END)
                                     except:
                                         messagebox.showinfo(
-                                            title='Invalide !!', message='Merci de saisir un numéro entre '+Dattta[0][7][8:len(Dattta[0][7])]+' et '+Dattta[len(Dattta)-1][7][8:len(Dattta[len(Dattta)-1][7])], parent=TopIdin)
+                                            title='Invalide !!', message='Pour les paiements de type "' + values[7][0] +'" merci de saisir un numéro entre 1'+' et '+ str(compteX)+'.', parent=TopIdin)
                                         ope = 1
                                         e60.delete(0, END)
+                                    
+                                    if changerowcolo == 1:
+                                        changerowcolo = 0
+                                        changerowcolor()
+                                    else:
+                                        changerowcolo = 1
+                                        changerowcolor()
 
                                 def hantaTchouf():
                                     global ope
@@ -3657,29 +6566,51 @@ def acceuil():
                             ope = 0
                     return
 
+                def telechDossCom(tree):
+                    my_tree.selection_set(my_tree.get_children()[0])
+                    my_tree.focus_set()
+                    my_tree.focus(my_tree.get_children()[0])
+                    my_tree.selection_add(my_tree.get_children())
+                    telechCSV(tree)
+                    att(tree)
+                    return
+
                 def telechCSV(tree):
                     global laDate
                     global Dattta
                     global année
                     global télo
                     x = laDate
-                    laDate = 'D-' + \
-                        str(laDate[6:len(laDate)])+'-'+str(laDate[3:5])
+                    laDate = str(laDate[6:len(laDate)]) + \
+                        '-' + str(laDate[3:5])
+
+                    # Créer le nom du dossier basé sur le nom du fichier Excel
+                    nom_dossier = os.path.splitext(str(laDate) + ".xlsx")[0]
+
+                    # Créer le dossier s'il n'existe pas déjà
+                    if not os.path.exists(nom_dossier):
+                        os.makedirs(nom_dossier)
+
                     try:
-                        wb = load_workbook(str(laDate)+".xlsx", read_only=True)
+                        wb = openpyxl.load_workbook(os.path.join(
+                            nom_dossier, str(laDate) + ".xlsx"), read_only=True)
                         if laDate in wb.sheetnames:
                             télo = 1
                     except:
                         télo = 0
-                    excel = xlsxwriter.Workbook(str(laDate)+".xlsx")
+
+                    excel = xlsxwriter.Workbook(os.path.join(
+                        nom_dossier, str(laDate) + ".xlsx"))
+
                     fiche = excel.add_worksheet(laDate)
+                    fiche.set_row(0, 30)
                     fiche.autofilter('A1:H11')
-                    format1 = excel.add_format()
+                    format1 = excel.add_format({'align': 'center', 'valign': 'vcenter'})
                     format1.set_bg_color('#00B0F0')
                     format1.set_border()
                     format1.set_border_color('#000000')
                     format1.set_bold()
-                    format1.set_center_across('center_across')
+                    format1.set_center_across()
                     format1.set_shrink()
                     format1.set_font_color('#44546A')
                     format1.set_font_size(10)
@@ -3688,7 +6619,7 @@ def acceuil():
                     format2.set_bg_color('#FFFFFF')
                     format2.set_border()
                     format2.set_border_color('#000000')
-                    format2.set_center_across('center_across')
+                    format2.set_center_across()
                     format2.set_shrink()
                     format2.set_font_size(9)
 
@@ -3745,7 +6676,8 @@ def acceuil():
                                     Dattta[i][6] = ' '
                                 if Dattta[i][7] == '':
                                     Dattta[i][7] = ' '
-                                Dattta[i][0] = Dattta[i][0][0:6]+"20"+str(année)[2:len(str(année))]
+                                Dattta[i][0] = Dattta[i][0][0:6] + \
+                                    "20"+str(année)[2:len(str(année))]
                             except:
                                 donothing = 0
                             fiche.write(i+1, 0, Dattta[i][0], format2)
@@ -3819,10 +6751,23 @@ def acceuil():
                     return
 
                 def att(tree):
-                    citrop=0
+
+                    citrop = 0
+                    global laDate
+                    x = laDate
+                    laDate = str(laDate[6:len(laDate)]) + \
+                        '-' + str(laDate[3:5])
+
+                    # Créer le nom du dossier basé sur le nom du fichier Excel
+                    nom_dossier = os.path.splitext(str(laDate) + ".xlsx")[0]
+
+                    # Créer le dossier s'il n'existe pas déjà
+                    if not os.path.exists(nom_dossier):
+                        os.makedirs(nom_dossier)
+
                     if len(tree.selection()) < 1:
                         messagebox.showinfo(
-                            title='!!', message='Merci de selectionner une ou plusieur lignes')
+                            title='!!', message='Merci de selectionner une ou plusieurs lignes')
                     elif len(tree.selection()) == len(Dattta):
                         for i in range(len(Dattta)):
                             try:
@@ -3860,7 +6805,7 @@ def acceuil():
                                     Dattta[i][6] = ' '
                                 if Dattta[i][7] == '':
                                     Dattta[i][7] = ' '
-                                
+
                             except:
                                 donotin = 0
                         for i in range(len(Dattta)):
@@ -3870,7 +6815,7 @@ def acceuil():
                             Montant_en_lettre = Dattta[i][6]
                             Nom = Dattta[i][3]
                             Type = Dattta[i][2]
-                            mois=''
+                            mois = ''
                             if Fait_le[3:5] == '01':
                                 mois = 'Janvier'
                             if Fait_le[3:5] == '02':
@@ -3898,97 +6843,542 @@ def acceuil():
                             pdf = FPDF(orientation='P', format='A4')
                             pdf.add_page()
 
-                            pdf.set_xy(90,65)
-                            pdf.set_font("times",size=21,style='BU')
-                            pdf.cell(txt='Attestation de Don',w=30,align='C')
-                            pdf.image('logo-att.png',80, 10,w = 50,h=40)
-                            pdf.set_xy(91.5,75)
-                            pdf.cell(txt=D_22_09_10,w=28,align='C')
+                            if D_22_09_10[0] == "D":
+                                pdf.set_xy(90, 65)
+                                pdf.set_font("times", size=21, style='BU')
+                                pdf.cell(txt='Attestation de Don',
+                                         w=30, align='C')
+                                pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                pdf.set_xy(91.5, 75)
+                                pdf.cell(txt=D_22_09_10, w=28, align='C')
+                                text1 = "Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
+                                text2 = Montant + \
+                                    " dirhams ("+Montant_en_lettre+" dirhams)"
+                                if Type.lower() == "espèce" or Type.lower() == "espece":
+                                    text3 = " en "
+                                else:
+                                    text3 = " par "
+                                text4 = Type+" "
+                                text5 = "de "
+                                text6 = Nom+"."
+                                text7 = "La contribution de "
+                                text8 = Nom+" "
+                                text9 = "participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
+                                text10 = Nom+" "
+                                text11 = "peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
+                                text12 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                                text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
 
-                            text1="Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
-                            text2=Montant+" dirhams ("+Montant_en_lettre+" dirhams)"
-                            if Type.lower()=="espèce" or Type.lower()=="espece":
-                                text3=" en "
-                            else:
-                                text3=" par "
-                            text4=Type+" "
-                            text5="de "
-                            text6=Nom+"."
-                            text7="La contribution de "
-                            text8=Nom+" "
-                            text9="participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
-                            text10=Nom+" "
-                            text11="peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
-                            text12="Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
-                            text13="Cette attestation est délivrée pour servir et valoir ce que de droit."
+                                text14 = "Fait à Casablanca, le "
+                                text15 = Fait_le[0:2]+" "+mois + \
+                                    " "+"20"+Fait_le[6:len(Fait_le)]
 
-                            text14="Fait à Casablanca, le "
-                            text15=Fait_le[0:2]+" "+mois+" "+"20"+Fait_le[6:len(Fait_le)]
+                                text16 = "Bouchra OUTAGHANI"
 
-                            text16="Bouchra OUTAGHANI"
+                                pdf.set_auto_page_break("ON", margin=0.0)
+                                pdf.set_font("times", size=12)
+                                pdf.set_xy(20, 105)
+                                pdf.multi_cell(w=170, h=5, txt=text1+"**"+text2+"**"+text3+"**"+text4+"**"+text5+"**"+text6+"**"+"\n\n"+text7+"**"+text8+"**"+text9+"\n\n"+"**"+text10+"**"+text11+"\n\n"+text12+"\n\n"+text13, markdown=True,
+                                               align='L')
 
-                            pdf.set_auto_page_break("ON", margin = 0.0)
-                            pdf.set_font("times",size=12)
-                            pdf.set_xy(20,105)
-                            pdf.multi_cell(w=170,h=5,txt=text1+"**"+text2+"**"+text3+"**"+text4+"**"+text5+"**"+text6+"**"+"\n\n"+text7+"**"+text8+"**"+text9+"\n\n"+"**"+text10+"**"+text11+"\n\n"+text12+"\n\n"+text13,markdown=True,
-                                            align='L')
+                                pdf.set_font("times", size=11)
+                                pdf.set_xy(100, 200)
+                                pdf.multi_cell(w=90, h=5, txt=text14+"**"+text15+"**" +
+                                               "\n\n"+"**"+text16+"**", markdown=True, align='R')
+                                pdf.set_xy(100, 215)
+                                pdf.multi_cell(
+                                    w=90, h=5, txt="**Trésorière Générale**", markdown=True, align='R')
+                                pdf.set_font("times", size=9)
+                                pdf.set_xy(100, 220)
+                                pdf.multi_cell(w=90, h=5, txt="**P.O**",
+                                               markdown=True, align='R')
+                                pdf.set_xy(100, 225)
+                                pdf.multi_cell(
+                                    w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                pdf.set_xy(100, 230)
+                                pdf.multi_cell(
+                                    w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
 
-                            pdf.set_font("times",size=11)
-                            pdf.set_xy(100,200)
-                            pdf.multi_cell(w=90,h=5,txt=text14+"**"+text15+"**"+"\n\n"+"**"+text16+"**",markdown=True,align='R')
-                            pdf.set_xy(100,215)
-                            pdf.multi_cell(w=90,h=5,txt="**Trésorière Générale**",markdown=True,align='R')
-                            pdf.set_font("times",size=9)
-                            pdf.set_xy(100,220)
-                            pdf.multi_cell(w=90,h=5,txt="**P.O**",markdown=True,align='R')
-                            pdf.set_xy(100,225)
-                            pdf.multi_cell(w=90,h=5,txt="**Bochra CHABBOUBA ELIDRISSI**",markdown=True,align='R')
-                            pdf.set_xy(100,230)
-                            pdf.multi_cell(w=90,h=5,txt="**Responsable Administrative et Financière**",markdown=True,align='R')
+                                pdf.set_fill_color(193, 153, 9)
+                                pdf.set_xy(8, 275)
+                                pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
+
+                                pdf.set_text_color(45, 82, 158)
+                                pdf.set_font("times", size=14, style="B")
+                                pdf.set_xy(8, 280)
+                                pdf.multi_cell(
+                                    w=0, h=5, txt="JADARA Foundation")
+
+                                pdf.set_text_color(193, 153, 9)
+                                pdf.set_font("times", size=7.5, style="")
+                                pdf.set_xy(8, 285)
+                                pdf.multi_cell(
+                                    w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                                pdf.set_text_color(0, 0, 0)
+                                pdf.set_font("times", size=7.5, style="")
+                                pdf.set_xy(8, 289)
+                                pdf.multi_cell(
+                                    w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                                pdf.set_font("times", size=8, style="")
+                                pdf.set_xy(107, 279)
+                                pdf.multi_cell(
+                                    w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                                pdf.set_font("times", size=8, style="")
+                                pdf.set_xy(158, 283)
+                                pdf.multi_cell(
+                                    w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                                pdf.set_xy(152, 275)
+                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                pdf.set_xy(102, 275)
+                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                nom_fichier_pdf = os.path.join(
+                                    nom_dossier, str(D_22_09_10) + ".pdf")
+
+                                pdf.output(nom_fichier_pdf)
+                            if D_22_09_10[0] == "S":
+                                def swbatts() : 
+                                    pdf.set_xy(90, 65)
+                                    pdf.set_font("times", size=21, style='BU')
+                                    pdf.cell(txt='Attestation de Don',
+                                            w=30, align='C')
+                                    pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                    pdf.set_xy(91.5, 75)
+                                    pdf.cell(txt=D_22_09_10, w=28, align='C')
+                                    nameevent = e808.get()
+                                    text1 = "Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
+                                    text2 = "**"+Montant + \
+                                        " dirhams ("+Montant_en_lettre+" dirhams)"+"**"
+                                    if Type.lower() == "espèce" or Type.lower() == "espece":
+                                        text3 = " en "
+                                    else:
+                                        text3 = " par "
+                                    text4 = "**"+Type+" "+"**"
+                                    text5 = "de"
+                                    text6 = "**"+" "+Nom+"**"+"."
+                                    text7 = "La contribution de "
+                                    text8 = "**"+Nom+" "+"**"
+                                    text9 = "participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
+                                    textX = "Cette contribution participera au financement de l'évènement :"
+                                    textY = "**"+" "+nameevent+"**"
+                                    text10 = "**"+" "+Nom+" "+"**"
+                                    text11 = "peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
+                                    text12 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                                    text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
+
+                                    text14 = "Fait à Casablanca, le "
+                                    text15 = Fait_le[0:2]+" "+mois + \
+                                        " "+"20"+Fait_le[6:len(Fait_le)]
+
+                                    text16 = "Bouchra OUTAGHANI"
+
+                                    pdf.set_auto_page_break("ON", margin=0.0)
+                                    pdf.set_font("times", size=12)
+                                    pdf.set_xy(20, 105)
+                                    pdf.multi_cell(w=170, h=5, txt=text1+text2+text3+text4+text5+text6+"\n\n"+text7+text8+text9+"\n\n"+textX+textY+"\n\n"+text10+text11+"\n\n"+text12+"\n\n"+text13, markdown=True,
+                                                align='L')
+
+                                    pdf.set_font("times", size=11)
+                                    pdf.set_xy(100, 200)
+                                    pdf.multi_cell(w=90, h=5, txt=text14+"**"+text15+"**" +
+                                                "\n\n"+"**"+text16+"**", markdown=True, align='R')
+                                    pdf.set_xy(100, 215)
+                                    pdf.multi_cell(
+                                        w=90, h=5, txt="**Trésorière Générale**", markdown=True, align='R')
+                                    pdf.set_font("times", size=9)
+                                    pdf.set_xy(100, 220)
+                                    pdf.multi_cell(w=90, h=5, txt="**P.O**",
+                                                markdown=True, align='R')
+                                    pdf.set_xy(100, 225)
+                                    pdf.multi_cell(
+                                        w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                    pdf.set_xy(100, 230)
+                                    pdf.multi_cell(
+                                        w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
+
+                                    pdf.set_fill_color(193, 153, 9)
+                                    pdf.set_xy(8, 275)
+                                    pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
+
+                                    pdf.set_text_color(45, 82, 158)
+                                    pdf.set_font("times", size=14, style="B")
+                                    pdf.set_xy(8, 280)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="JADARA Foundation")
+
+                                    pdf.set_text_color(193, 153, 9)
+                                    pdf.set_font("times", size=7.5, style="")
+                                    pdf.set_xy(8, 285)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                                    pdf.set_text_color(0, 0, 0)
+                                    pdf.set_font("times", size=7.5, style="")
+                                    pdf.set_xy(8, 289)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                                    pdf.set_font("times", size=8, style="")
+                                    pdf.set_xy(107, 279)
+                                    pdf.multi_cell(
+                                        w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                                    pdf.set_font("times", size=8, style="")
+                                    pdf.set_xy(158, 283)
+                                    pdf.multi_cell(
+                                        w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                                    pdf.set_xy(152, 275)
+                                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                    pdf.set_xy(102, 275)
+                                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                    e808.delete(0, END)
+                                    topatts.destroy()
+
+                                    nom_fichier_pdf = os.path.join(
+                                        nom_dossier, str(D_22_09_10) + ".pdf")
+
+                                    pdf.output(nom_fichier_pdf)
+                                topatts = Toplevel()
+                                topatts.title(D_22_09_10)
+                                topatts.geometry("500x200")
+                                topatts.resizable(width=0, height=0)
+                                icon = PhotoImage(file='logo-light.png')
+                                window.tk.call('wm', 'iconphoto', topatts._w, icon)
+                                l800 = Label(topatts, text=Type+" ("+Montant+" DH) de "+Nom,
+                                            font=('Times', 11, 'bold'))
+                                l800.place(x=50, y=25)
+                                l808 = Label(topatts, text="Cette contribution participera au financement de l'évènement :",
+                                            font=('Times', 11, 'bold'))
+                                e808 = Entry(
+                                    topatts,  width=25)
+                                l808.place(x=50, y=72)
+                                e808.place(x=150, y=95)
+                                def hantaTchoufatts():
+                                    e808.delete(0, END)
+                                    topatts.destroy()
+                                submitbuttonatts = Button(
+                                    topatts, text='Enregistrer', command=lambda: swbatts())
+                                submitbuttonatts.configure(
+                                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                                submitbuttonatts.place(x=250, y=150)
+                                cancelbuttonatts = Button(
+                                    topatts, text='Annulé', command=lambda: hantaTchoufatts())
+                                cancelbuttonatts.configure(
+                                    font=('Times', 11, 'bold'), bg='red', fg='white')
+                                cancelbuttonatts.place(x=150, y=150)
+                                topatts.protocol(
+                                    "WM_DELETE_WINDOW", hantaTchoufatts)
+                                topatts.bind(
+                                    "<Return>", lambda e: swbatts())
+                                topatts.bind(
+                                    "<Escape>", lambda e: hantaTchoufatts())
+                                topatts.wait_window()
+                            if D_22_09_10[0] == "P":
+                                def swbattp():
+                                    pdf.set_xy(90, 65)
+                                    pdf.set_font("times", size=21, style='BU')
+                                    pdf.cell(txt='Attestation de Don en nature',
+                                            w=30, align='C')
+                                    pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                    pdf.set_xy(91.5, 75)
+                                    pdf.cell(txt=D_22_09_10+"-"+e802.get()+"DN", w=30, align='C')
+                                    text10 = "Je soussignée, Mme Bochra CHABBOUBA ELIDRISSI, Responsable Administrative et Financière de JADARA FOUBDATION, atteste par la présente que l'association a bénéficié au titre de l'année scolaire"
+                                    text11 = "**"+" "+e801.get()+"**"
+                                    text12 = " d'un don en nature de la part de :"
+                                    text13 = "**"+" "+e808.get()+"**"
+                                    text14 = "Ce don est sous forme d'une place pédagogique gracieusement offerte au profit du boursier inscrit régulièrement au titre de l'année universitaire"
+                                    text15 = "**"+"Nom : "+e803.get()+"**"
+                                    text16 = "**"+"CIN : "+e804.get()+"**"
+                                    text17 = "**"+"Etudiant en : "+e805.get()+"**"
+                                    text18 = "Ce don est valorisé dans les livres comptables de notre association au titre de l'exercice"+"**"+" "+e802.get()+"**"
+                                    text19 ="**"+ Montant + \
+                                        " dirhams ("+Montant_en_lettre+" dirhams)."+"**"
+                                    text199="Cette contribution participe au financement de la mission de JADARA FOUNDATION dont l'objet est de financer des bourses d'études supérieures pour les bacheliers méritants issus de milieux défavorisés."
+                                    text20 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                                    text21 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
+
+                                    text22 = "Fait à Casablanca, le "
+                                    text23 = Fait_le[0:2]+" "+mois + \
+                                        " "+"20"+Fait_le[6:len(Fait_le)]
 
 
+                                    pdf.set_auto_page_break("ON", margin=0.0)
+                                    pdf.set_font("times", size=12)
+                                    pdf.set_xy(20, 100)
+                                    pdf.multi_cell(w=170, h=5, txt=text10+text11+text12+"\n\n"+"                                               "+text13+"\n\n"+text14+text11+" :"+"\n\n"+"       "+text15+"\n\n"+"       "+text16+"\n\n"+"       "+text17+"\n\n"+text18+" à hauteur de "+text19+"\n\n"+text199+"\n\n"+text20+"\n\n"+text21, markdown=True,
+                                                align='L')
 
-                            pdf.set_fill_color(193, 153, 9)
-                            pdf.set_xy(8,275)
-                            pdf.multi_cell(w=0,h=0.5,txt="",fill=True)
+                                    pdf.set_font("times", size=11)
+                                    pdf.set_xy(100, 240)
+                                    pdf.multi_cell(w=90, h=5, txt=text22+"**"+text23+"**", markdown=True, align='R')
+                                    pdf.set_xy(100, 250)
+                                    pdf.multi_cell(
+                                        w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                    pdf.set_xy(100, 255)
+                                    pdf.multi_cell(
+                                        w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
 
-                            pdf.set_text_color(45, 82, 158)
-                            pdf.set_font("times",size=14,style="B")
-                            pdf.set_xy(8,280)
-                            pdf.multi_cell(w=0,h=5,txt="JADARA Foundation")
+                                    pdf.set_fill_color(193, 153, 9)
+                                    pdf.set_xy(8, 275)
+                                    pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
 
-                            pdf.set_text_color(193, 153, 9)
-                            pdf.set_font("times",size=7.5,style="")
-                            pdf.set_xy(8,285)
-                            pdf.multi_cell(w=0,h=5,txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+                                    pdf.set_text_color(45, 82, 158)
+                                    pdf.set_font("times", size=14, style="B")
+                                    pdf.set_xy(8, 280)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="JADARA Foundation")
 
-                            pdf.set_text_color(0, 0, 0)
-                            pdf.set_font("times",size=7.5,style="")
-                            pdf.set_xy(8,289)
-                            pdf.multi_cell(w=0,h=5,txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca",markdown=True)
+                                    pdf.set_text_color(193, 153, 9)
+                                    pdf.set_font("times", size=7.5, style="")
+                                    pdf.set_xy(8, 285)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
 
+                                    pdf.set_text_color(0, 0, 0)
+                                    pdf.set_font("times", size=7.5, style="")
+                                    pdf.set_xy(8, 289)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
 
-                            pdf.set_font("times",size=8,style="")
-                            pdf.set_xy(107,279)     
-                            pdf.multi_cell(w=40,h=5,txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation",markdown=True)
+                                    pdf.set_font("times", size=8, style="")
+                                    pdf.set_xy(107, 279)
+                                    pdf.multi_cell(
+                                        w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
 
-                            pdf.set_font("times",size=8,style="")
-                            pdf.set_xy(158,283)     
-                            pdf.multi_cell(w=40,h=5,txt="**www.jadara.foundation**",markdown=True)
+                                    pdf.set_font("times", size=8, style="")
+                                    pdf.set_xy(158, 283)
+                                    pdf.multi_cell(
+                                        w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
 
+                                    pdf.set_xy(152, 275)
+                                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
 
-                            pdf.set_xy(152,275)
-                            pdf.multi_cell(w=0.5,h=20,txt="",fill=True)
+                                    pdf.set_xy(102, 275)
+                                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
 
+                                    e808.delete(0, END)
+                                    e801.delete(0, END)
+                                    e802.delete(0, END)
+                                    e803.delete(0, END)
+                                    e804.delete(0, END)
+                                    e805.delete(0, END)
+                                    topattp.destroy()
 
-                            pdf.set_xy(102,275)
-                            pdf.multi_cell(w=0.5,h=20,txt="",fill=True)
+                                    nom_fichier_pdf = os.path.join(
+                                        nom_dossier, str(D_22_09_10) + ".pdf")
+                                    pdf.output(nom_fichier_pdf)
+                                topattp = Toplevel()
+                                topattp.title(D_22_09_10)
+                                topattp.geometry("500x360")
+                                topattp.resizable(width=0, height=0)
+                                icon = PhotoImage(file='logo-light.png')
+                                window.tk.call('wm', 'iconphoto', topattp._w, icon)
+                                l800 = Label(topattp, text=Type+" ("+Montant+" DH) de "+Nom,
+                                            font=('Times', 11, 'bold'))
+                                l800.place(x=50, y=25)
+                                l808 = Label(topattp, text="De la part de : ",
+                                            font=('Times', 11, 'bold'))
+                                e808 = Entry(
+                                    topattp,  width=25)
+                                l808.place(x=50, y=72)
+                                e808.place(x=200, y=70)
+                                l802 = Label(topattp, text="Exercice : ",
+                                            font=('Times', 11, 'bold'))
+                                e802 = Entry(
+                                    topattp,  width=25)
+                                l802.place(x=50, y=112)
+                                e802.place(x=200, y=110)
+                                l801 = Label(topattp, text="Année scolaire : ",
+                                            font=('Times', 11, 'bold'))
+                                e801 = Entry(
+                                    topattp,  width=25)
+                                l801.place(x=50, y=152)
+                                e801.place(x=200, y=150)
+                                l803 = Label(topattp, text="Nom étudiant : ",
+                                            font=('Times', 11, 'bold'))
+                                e803 = Entry(
+                                    topattp,  width=25)
+                                l803.place(x=50, y=192)
+                                e803.place(x=200, y=190)
+                                l804 = Label(topattp, text="CIN étudiant : ",
+                                            font=('Times', 11, 'bold'))
+                                e804 = Entry(
+                                    topattp,  width=25)
+                                l804.place(x=50, y=232)
+                                e804.place(x=200, y=230)
+                                l805 = Label(topattp, text="Etudiant en : ",
+                                            font=('Times', 11, 'bold'))
+                                e805 = Entry(
+                                    topattp,  width=25)
+                                l805.place(x=50, y=272)
+                                e805.place(x=200, y=270)
+                                def hantaTchoufattp():
+                                    e808.delete(0, END)
+                                    e801.delete(0, END)
+                                    e802.delete(0, END)
+                                    e803.delete(0, END)
+                                    e804.delete(0, END)
+                                    e805.delete(0, END)
+                                    topattp.destroy()
+                                submitbuttonattp = Button(
+                                    topattp, text='Enregistrer', command=lambda: swbattp())
+                                submitbuttonattp.configure(
+                                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                                submitbuttonattp.place(x=300, y=320)
+                                cancelbuttonattp = Button(
+                                    topattp, text='Annulé', command=lambda: hantaTchoufattp())
+                                cancelbuttonattp.configure(
+                                    font=('Times', 11, 'bold'), bg='red', fg='white')
+                                cancelbuttonattp.place(x=200, y=320)
+                                topattp.protocol(
+                                    "WM_DELETE_WINDOW", hantaTchoufattp)
+                                topattp.bind(
+                                    "<Return>", lambda e: swbattp())
+                                topattp.bind(
+                                    "<Escape>", lambda e: hantaTchoufattp())
+                                topattp.wait_window()
+                            if D_22_09_10[0] == "C":
+                                def swbattc() : 
+                                    pdf.set_xy(90, 65)
+                                    pdf.set_font("times", size=21, style='BU')
+                                    pdf.cell(txt='Attestation de Cotisation',
+                                            w=30, align='C')
+                                    pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                    pdf.set_xy(91.5, 75)
+                                    pdf.cell(txt=D_22_09_10, w=28, align='C')
+                                    text1 = "Nous, JADARA FOUNDATION, attestons par la présente avoir reçu la somme de "
+                                    text2 = "**"+Montant + \
+                                        " dirhams ("+Montant_en_lettre+" dirhams) "+"**"
+                                    text5 = "de "
+                                    text6 ="**"+Nom+" "+"**"
+                                    text7 = labelc.cget('text')
+                                    text8 = "**"+" "+e908.get()+"**"+"."
+                                    text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
 
+                                    text22 = "Fait à Casablanca, le "
+                                    text23 = Fait_le[0:2]+" "+mois + \
+                                        " "+"20"+Fait_le[6:len(Fait_le)]
 
+                                    pdf.set_auto_page_break("ON", margin=0.0)
+                                    pdf.set_font("times", size=13)
+                                    pdf.set_xy(20, 120)
+                                    pdf.multi_cell(w=170, h=5, txt=text1+text2+text5+text6+text7+text8+"\n\n"+text13, markdown=True,
+                                                align='L')
+                                    pdf.set_font("times", size=11)
+                                    pdf.set_xy(100, 200)
+                                    pdf.multi_cell(w=90, h=5, txt=text22+"**"+text23+"**", markdown=True, align='R')
+                                    pdf.set_xy(100, 210)
+                                    pdf.multi_cell(
+                                        w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                    pdf.set_xy(100, 215)
+                                    pdf.multi_cell(
+                                        w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
 
+                                    pdf.set_fill_color(193, 153, 9)
+                                    pdf.set_xy(8, 275)
+                                    pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
 
-                            pdf.output(str(D_22_09_10)+".pdf")
-                            citrop=1
+                                    pdf.set_text_color(45, 82, 158)
+                                    pdf.set_font("times", size=14, style="B")
+                                    pdf.set_xy(8, 280)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="JADARA Foundation")
+
+                                    pdf.set_text_color(193, 153, 9)
+                                    pdf.set_font("times", size=7.5, style="")
+                                    pdf.set_xy(8, 285)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                                    pdf.set_text_color(0, 0, 0)
+                                    pdf.set_font("times", size=7.5, style="")
+                                    pdf.set_xy(8, 289)
+                                    pdf.multi_cell(
+                                        w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                                    pdf.set_font("times", size=8, style="")
+                                    pdf.set_xy(107, 279)
+                                    pdf.multi_cell(
+                                        w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                                    pdf.set_font("times", size=8, style="")
+                                    pdf.set_xy(158, 283)
+                                    pdf.multi_cell(
+                                        w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                                    pdf.set_xy(152, 275)
+                                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                    pdf.set_xy(102, 275)
+                                    pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+                                    
+                                    e908.delete(0, END)
+                                    topattc.destroy()
+                                    nom_fichier_pdf = os.path.join(
+                                        nom_dossier, str(D_22_09_10) + ".pdf")
+
+                                    pdf.output(nom_fichier_pdf)
+
+                                topattc = Toplevel()
+                                topattc.title(D_22_09_10)
+                                topattc.geometry("500x220")
+                                topattc.resizable(width=0, height=0)
+                                icon = PhotoImage(file='logo-light.png')
+                                window.tk.call('wm', 'iconphoto', topattc._w, icon)
+                                l900 = Label(topattc, text=Type+" ("+Montant+" DH) de "+Nom,
+                                            font=('Times', 11, 'bold'))
+                                l900.place(x=50, y=25)
+                                def update_label():
+                                    if var.get() == 1:
+                                        labelc.config(text="en tant que membre de l'association au titre de l'année")
+                                    else:
+                                        labelc.config(text="en tant que membre de l'association au titre des années :")
+
+                                var = IntVar()
+                                var.set(1)  # Coche le premier checkbutton par défaut
+
+                                checkbuttonc1 = Checkbutton(topattc, text="Une année", variable=var, onvalue=1, offvalue=0, command=update_label)
+                                checkbuttonc1.place(x=90, y=60)
+
+                                checkbuttonc2 = Checkbutton(topattc, text="Plusieurs années", variable=var, onvalue=0, offvalue=1, command=update_label)
+                                checkbuttonc2.place(x=240, y=60)
+
+                                labelc = Label(topattc, text="en tant que membre de l'association au titre de l'année")
+                                labelc.place(x=50, y=90)
+
+                                e908 = Entry(topattc, width=25)
+                                e908.pack()
+                                e908.place(x=150, y=120)
+                                def hantaTchoufattc():
+                                    e908.delete(0, END)
+                                    topattc.destroy()
+                                submitbuttonattc = Button(
+                                    topattc, text='Enregistrer', command=lambda: swbattc())
+                                submitbuttonattc.configure(
+                                    font=('Times', 11, 'bold'), bg='green', fg='white')
+                                submitbuttonattc.place(x=250, y=170)
+                                cancelbuttonattc = Button(
+                                    topattc, text='Annulé', command=lambda: hantaTchoufattc())
+                                cancelbuttonattc.configure(
+                                    font=('Times', 11, 'bold'), bg='red', fg='white')
+                                cancelbuttonattc.place(x=150, y=170)
+                                topattc.protocol(
+                                    "WM_DELETE_WINDOW", hantaTchoufattc)
+                                topattc.bind(
+                                    "<Return>", lambda e: swbattc())
+                                topattc.bind(
+                                    "<Escape>", lambda e: hantaTchoufattc())
+                                topattc.wait_window()
+                            laDate = x
+                            citrop = 1
                         for i in range(len(Dattta)):
                             try:
                                 if Dattta[i][3] == ' ':
@@ -4081,8 +7471,10 @@ def acceuil():
                                         Montant = Dattta[j][4]
                                         Montant_en_lettre = Dattta[j][6]
                                         Nom = Dattta[j][3]
+                                        if Nom == "":
+                                            Nom = " "
                                         Type = Dattta[j][2]
-                                        mois=''
+                                        mois = ''
                                         if Fait_le[3:5] == '01':
                                             mois = 'Janvier'
                                         if Fait_le[3:5] == '02':
@@ -4107,90 +7499,546 @@ def acceuil():
                                             mois = 'Novembre'
                                         if Fait_le[3:5] == '12':
                                             mois = 'Décembre'
-                                        pdf = FPDF(orientation='P', format='A4')
+                                        pdf = FPDF(
+                                            orientation='P', format='A4')
                                         pdf.add_page()
-                                        pdf.set_xy(90,65)
-                                        pdf.set_font("times",size=21,style='BU')
-                                        pdf.cell(txt='Attestation de Don',w=30,align='C')
-                                        pdf.image('logo-att.png',80, 10,w = 50,h=40)
-                                        pdf.set_xy(91.5,75)
-                                        pdf.cell(txt=D_22_09_10,w=28,align='C')
+                                        if D_22_09_10[0] == "D":
+                                            pdf.set_xy(90, 65)
+                                            pdf.set_font("times", size=21, style='BU')
+                                            pdf.cell(txt='Attestation de Don',
+                                                    w=30, align='C')
+                                            pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                            pdf.set_xy(91.5, 75)
+                                            pdf.cell(txt=D_22_09_10, w=28, align='C')
+                                            text1 = "Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
+                                            text2 = Montant + \
+                                                " dirhams ("+Montant_en_lettre+" dirhams)"
+                                            if Type.lower() == "espèce" or Type.lower() == "espece":
+                                                text3 = " en "
+                                            else:
+                                                text3 = " par "
+                                            text4 = Type+" "
+                                            text5 = "de "
+                                            text6 = Nom+"."
+                                            text7 = "La contribution de "
+                                            text8 = Nom+" "
+                                            text9 = "participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
+                                            text10 = Nom+" "
+                                            text11 = "peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
+                                            text12 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                                            text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
 
-                                        text1="Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
-                                        text2=Montant+" dirhams ("+Montant_en_lettre+" dirhams)"
-                                        if Type.lower()=="espèce" or Type.lower()=="espece":
-                                            text3=" en "
-                                        else:
-                                            text3=" par "
-                                        text4=Type+" "
-                                        text5="de "
-                                        text6=Nom+"."
-                                        text7="La contribution de "
-                                        text8=Nom+" "
-                                        text9="participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
-                                        text10=Nom+" "
-                                        text11="peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
-                                        text12="Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
-                                        text13="Cette attestation est délivrée pour servir et valoir ce que de droit."
+                                            text14 = "Fait à Casablanca, le "
+                                            text15 = Fait_le[0:2]+" "+mois + \
+                                                " "+"20"+Fait_le[6:len(Fait_le)]
 
-                                        text14="Fait à Casablanca, le "
-                                        text15=Fait_le[0:2]+" "+mois+" "+"20"+Fait_le[6:len(Fait_le)]
-                                        text16="Bouchra OUTAGHANI"
+                                            text16 = "Bouchra OUTAGHANI"
 
-                                        pdf.set_auto_page_break("ON", margin = 0.0)
-                                        pdf.set_font("times",size=12)
-                                        pdf.set_xy(20,105)
-                                        pdf.multi_cell(w=170,h=5,txt=text1+"**"+text2+"**"+text3+"**"+text4+"**"+text5+"**"+text6+"**"+"\n\n"+text7+"**"+text8+"**"+text9+"\n\n"+"**"+text10+"**"+text11+"\n\n"+text12+"\n\n"+text13,markdown=True,
+                                            pdf.set_auto_page_break("ON", margin=0.0)
+                                            pdf.set_font("times", size=12)
+                                            pdf.set_xy(20, 105)
+                                            pdf.multi_cell(w=170, h=5, txt=text1+"**"+text2+"**"+text3+"**"+text4+"**"+text5+"**"+text6+"**"+"\n\n"+text7+"**"+text8+"**"+text9+"\n\n"+"**"+text10+"**"+text11+"\n\n"+text12+"\n\n"+text13, markdown=True,
                                                         align='L')
 
-                                        pdf.set_font("times",size=11)
-                                        pdf.set_xy(100,200)
-                                        pdf.multi_cell(w=90,h=5,txt=text14+"**"+text15+"**"+"\n\n"+"**"+text16+"**",markdown=True,align='R')
-                                        pdf.set_xy(100,215)
-                                        pdf.multi_cell(w=90,h=5,txt="**Trésorière Générale**",markdown=True,align='R')
-                                        pdf.set_font("times",size=9)
-                                        pdf.set_xy(100,220)
-                                        pdf.multi_cell(w=90,h=5,txt="**P.O**",markdown=True,align='R')
-                                        pdf.set_xy(100,225)
-                                        pdf.multi_cell(w=90,h=5,txt="**Bochra CHABBOUBA ELIDRISSI**",markdown=True,align='R')
-                                        pdf.set_xy(100,230)
-                                        pdf.multi_cell(w=90,h=5,txt="**Responsable Administrative et Financière**",markdown=True,align='R')
+                                            pdf.set_font("times", size=11)
+                                            pdf.set_xy(100, 200)
+                                            pdf.multi_cell(w=90, h=5, txt=text14+"**"+text15+"**" +
+                                                        "\n\n"+"**"+text16+"**", markdown=True, align='R')
+                                            pdf.set_xy(100, 215)
+                                            pdf.multi_cell(
+                                                w=90, h=5, txt="**Trésorière Générale**", markdown=True, align='R')
+                                            pdf.set_font("times", size=9)
+                                            pdf.set_xy(100, 220)
+                                            pdf.multi_cell(w=90, h=5, txt="**P.O**",
+                                                        markdown=True, align='R')
+                                            pdf.set_xy(100, 225)
+                                            pdf.multi_cell(
+                                                w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                            pdf.set_xy(100, 230)
+                                            pdf.multi_cell(
+                                                w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
 
-                                        pdf.set_fill_color(193, 153, 9)
-                                        pdf.set_xy(8,275)
-                                        pdf.multi_cell(w=0,h=0.5,txt="",fill=True)
+                                            pdf.set_fill_color(193, 153, 9)
+                                            pdf.set_xy(8, 275)
+                                            pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
 
-                                        pdf.set_text_color(45, 82, 158)
-                                        pdf.set_font("times",size=14,style="B")
-                                        pdf.set_xy(8,280)
-                                        pdf.multi_cell(w=0,h=5,txt="JADARA Foundation")
+                                            pdf.set_text_color(45, 82, 158)
+                                            pdf.set_font("times", size=14, style="B")
+                                            pdf.set_xy(8, 280)
+                                            pdf.multi_cell(
+                                                w=0, h=5, txt="JADARA Foundation")
 
-                                        pdf.set_text_color(193, 153, 9)
-                                        pdf.set_font("times",size=7.5,style="")
-                                        pdf.set_xy(8,285)
-                                        pdf.multi_cell(w=0,h=5,txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+                                            pdf.set_text_color(193, 153, 9)
+                                            pdf.set_font("times", size=7.5, style="")
+                                            pdf.set_xy(8, 285)
+                                            pdf.multi_cell(
+                                                w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
 
-                                        pdf.set_text_color(0, 0, 0)
-                                        pdf.set_font("times",size=7.5,style="")
-                                        pdf.set_xy(8,289)
-                                        pdf.multi_cell(w=0,h=5,txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca",markdown=True)
+                                            pdf.set_text_color(0, 0, 0)
+                                            pdf.set_font("times", size=7.5, style="")
+                                            pdf.set_xy(8, 289)
+                                            pdf.multi_cell(
+                                                w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
 
-                                        pdf.set_font("times",size=8,style="")
-                                        pdf.set_xy(107,279)     
-                                        pdf.multi_cell(w=40,h=5,txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation",markdown=True)
+                                            pdf.set_font("times", size=8, style="")
+                                            pdf.set_xy(107, 279)
+                                            pdf.multi_cell(
+                                                w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
 
-                                        pdf.set_font("times",size=8,style="")
-                                        pdf.set_xy(158,283)     
-                                        pdf.multi_cell(w=40,h=5,txt="**www.jadara.foundation**",markdown=True)
+                                            pdf.set_font("times", size=8, style="")
+                                            pdf.set_xy(158, 283)
+                                            pdf.multi_cell(
+                                                w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
 
-                                        pdf.set_xy(152,275)
-                                        pdf.multi_cell(w=0.5,h=20,txt="",fill=True)
+                                            pdf.set_xy(152, 275)
+                                            pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
 
-                                        pdf.set_xy(102,275)
-                                        pdf.multi_cell(w=0.5,h=20,txt="",fill=True)
+                                            pdf.set_xy(102, 275)
+                                            pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
 
-                                        pdf.output(str(D_22_09_10)+".pdf")
-                                        citrop=1
+                                            nom_fichier_pdf = os.path.join(
+                                                nom_dossier, str(D_22_09_10) + ".pdf")
+
+                                            pdf.output(nom_fichier_pdf)
+                                        if D_22_09_10[0] == "S":
+                                            def swbatts() : 
+                                                pdf.set_xy(90, 65)
+                                                pdf.set_font("times", size=21, style='BU')
+                                                pdf.cell(txt='Attestation de Don',
+                                                        w=30, align='C')
+                                                pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                                pdf.set_xy(91.5, 75)
+                                                pdf.cell(txt=D_22_09_10, w=28, align='C')
+                                                nameevent = e808.get()
+                                                text1 = "Je soussignée, Mme Bouchra OUTAGHANI, Trésorière Générale de JADARA FOUNDATION, atteste par la présente avoir reçu la somme de "
+                                                text2 = "**"+Montant + \
+                                                    " dirhams ("+Montant_en_lettre+" dirhams)"+"**"
+                                                if Type.lower() == "espèce" or Type.lower() == "espece":
+                                                    text3 = " en "
+                                                else:
+                                                    text3 = " par "
+                                                text4 = "**"+Type+" "+"**"
+                                                text5 = "de"
+                                                text6 = "**"+" "+Nom+"**"+"."
+                                                text7 = "La contribution de "
+                                                text8 = "**"+Nom+" "+"**"
+                                                text9 = "participera au financement de la mission de JADARA Foudation telle que prévue par ses status accessibles sur son site web www.jadara.foundation."
+                                                textX = "Cette contribution participera au financement de l'évènement :"
+                                                textY = "**"+" "+nameevent+"**"
+                                                text10 = "**"+" "+Nom+" "+"**"
+                                                text11 = "peut accéder au rapport morale et financier de JADARA Foudation sur son site web www.jadara.foudation."
+                                                text12 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                                                text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
+
+                                                text14 = "Fait à Casablanca, le "
+                                                text15 = Fait_le[0:2]+" "+mois + \
+                                                    " "+"20"+Fait_le[6:len(Fait_le)]
+
+                                                text16 = "Bouchra OUTAGHANI"
+
+                                                pdf.set_auto_page_break("ON", margin=0.0)
+                                                pdf.set_font("times", size=12)
+                                                pdf.set_xy(20, 105)
+                                                pdf.multi_cell(w=170, h=5, txt=text1+text2+text3+text4+text5+text6+"\n\n"+text7+text8+text9+"\n\n"+textX+textY+"\n\n"+text10+text11+"\n\n"+text12+"\n\n"+text13, markdown=True,
+                                                            align='L')
+
+                                                pdf.set_font("times", size=11)
+                                                pdf.set_xy(100, 200)
+                                                pdf.multi_cell(w=90, h=5, txt=text14+"**"+text15+"**" +
+                                                            "\n\n"+"**"+text16+"**", markdown=True, align='R')
+                                                pdf.set_xy(100, 215)
+                                                pdf.multi_cell(
+                                                    w=90, h=5, txt="**Trésorière Générale**", markdown=True, align='R')
+                                                pdf.set_font("times", size=9)
+                                                pdf.set_xy(100, 220)
+                                                pdf.multi_cell(w=90, h=5, txt="**P.O**",
+                                                            markdown=True, align='R')
+                                                pdf.set_xy(100, 225)
+                                                pdf.multi_cell(
+                                                    w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                                pdf.set_xy(100, 230)
+                                                pdf.multi_cell(
+                                                    w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
+
+                                                pdf.set_fill_color(193, 153, 9)
+                                                pdf.set_xy(8, 275)
+                                                pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
+
+                                                pdf.set_text_color(45, 82, 158)
+                                                pdf.set_font("times", size=14, style="B")
+                                                pdf.set_xy(8, 280)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="JADARA Foundation")
+
+                                                pdf.set_text_color(193, 153, 9)
+                                                pdf.set_font("times", size=7.5, style="")
+                                                pdf.set_xy(8, 285)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                                                pdf.set_text_color(0, 0, 0)
+                                                pdf.set_font("times", size=7.5, style="")
+                                                pdf.set_xy(8, 289)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                                                pdf.set_font("times", size=8, style="")
+                                                pdf.set_xy(107, 279)
+                                                pdf.multi_cell(
+                                                    w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                                                pdf.set_font("times", size=8, style="")
+                                                pdf.set_xy(158, 283)
+                                                pdf.multi_cell(
+                                                    w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                                                pdf.set_xy(152, 275)
+                                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                                pdf.set_xy(102, 275)
+                                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                                e808.delete(0, END)
+                                                topatts.destroy()
+
+                                                nom_fichier_pdf = os.path.join(
+                                                    nom_dossier, str(D_22_09_10) + ".pdf")
+
+                                                pdf.output(nom_fichier_pdf)
+                                            topatts = Toplevel()
+                                            topatts.title(D_22_09_10)
+                                            topatts.geometry("500x200")
+                                            topatts.resizable(width=0, height=0)
+                                            icon = PhotoImage(file='logo-light.png')
+                                            window.tk.call('wm', 'iconphoto', topatts._w, icon)
+                                            l800 = Label(topatts, text=Type+" ("+Montant+" DH) de "+Nom,
+                                                        font=('Times', 11, 'bold'))
+                                            l800.place(x=50, y=25)
+                                            l808 = Label(topatts, text="Cette contribution participera au financement de l'évènement :",
+                                                        font=('Times', 11, 'bold'))
+                                            e808 = Entry(
+                                                topatts,  width=25)
+                                            l808.place(x=50, y=72)
+                                            e808.place(x=150, y=95)
+                                            def hantaTchoufatts():
+                                                e808.delete(0, END)
+                                                topatts.destroy()
+                                            submitbuttonatts = Button(
+                                                topatts, text='Enregistrer', command=lambda: swbatts())
+                                            submitbuttonatts.configure(
+                                                font=('Times', 11, 'bold'), bg='green', fg='white')
+                                            submitbuttonatts.place(x=250, y=150)
+                                            cancelbuttonatts = Button(
+                                                topatts, text='Annulé', command=lambda: hantaTchoufatts())
+                                            cancelbuttonatts.configure(
+                                                font=('Times', 11, 'bold'), bg='red', fg='white')
+                                            cancelbuttonatts.place(x=150, y=150)
+                                            topatts.protocol(
+                                                "WM_DELETE_WINDOW", hantaTchoufatts)
+                                            topatts.bind(
+                                                "<Return>", lambda e: swbatts())
+                                            topatts.bind(
+                                                "<Escape>", lambda e: hantaTchoufatts())
+                                            topatts.wait_window()
+                                        if D_22_09_10[0] == "P":
+                                            def swbattp():
+                                                pdf.set_xy(90, 65)
+                                                pdf.set_font("times", size=21, style='BU')
+                                                pdf.cell(txt='Attestation de Don en nature',
+                                                        w=30, align='C')
+                                                pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                                pdf.set_xy(91.5, 75)
+                                                pdf.cell(txt=D_22_09_10+"-"+e802.get()+"-DN", w=30, align='C')
+                                                text10 = "Je soussignée, Mme Bochra CHABBOUBA ELIDRISSI, Responsable Administrative et Financière de JADARA FOUBDATION, atteste par la présente que l'association a bénéficié au titre de l'année scolaire"
+                                                text11 = "**"+" "+e801.get()+"**"
+                                                text12 = " d'un don en nature de la part de :"
+                                                text13 = "**"+" "+e808.get()+"**"
+                                                text14 = "Ce don est sous forme d'une place pédagogique gracieusement offerte au profit du boursier inscrit régulièrement au titre de l'année universitaire"
+                                                text15 = "**"+"Nom : "+e803.get()+"**"
+                                                text16 = "**"+"CIN : "+e804.get()+"**"
+                                                text17 = "**"+"Etudiant en : "+e805.get()+"**"
+                                                text18 = "Ce don est valorisé dans les livres comptables de notre association au titre de l'exercice"+"**"+" "+e802.get()+"**"
+                                                text19 ="**"+ Montant + \
+                                                    " dirhams ("+Montant_en_lettre+" dirhams)."+"**"
+                                                text199="Cette contribution participe au financement de la mission de JADARA FOUNDATION dont l'objet est de financer des bourses d'études supérieures pour les bacheliers méritants issus de milieux défavorisés."
+                                                text20 = "Jadara Foudation est une association reconnue d'utilité publique par le Décret N°2-13-339 du 29 Avril 2013 tel que modifié par le Décret N°2.22.834 du 19 octobre 2022."
+                                                text21 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
+
+                                                text22 = "Fait à Casablanca, le "
+                                                text23 = Fait_le[0:2]+" "+mois + \
+                                                    " "+"20"+Fait_le[6:len(Fait_le)]
+
+
+                                                pdf.set_auto_page_break("ON", margin=0.0)
+                                                pdf.set_font("times", size=12)
+                                                pdf.set_xy(20, 100)
+                                                pdf.multi_cell(w=170, h=5, txt=text10+text11+text12+"\n\n"+"                                               "+text13+"\n\n"+text14+text11+" :"+"\n\n"+"       "+text15+"\n\n"+"       "+text16+"\n\n"+"       "+text17+"\n\n"+text18+" à hauteur de "+text19+"\n\n"+text199+"\n\n"+text20+"\n\n"+text21, markdown=True,
+                                                            align='L')
+
+                                                pdf.set_font("times", size=11)
+                                                pdf.set_xy(100, 240)
+                                                pdf.multi_cell(w=90, h=5, txt=text22+"**"+text23+"**", markdown=True, align='R')
+                                                pdf.set_xy(100, 250)
+                                                pdf.multi_cell(
+                                                    w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                                pdf.set_xy(100, 255)
+                                                pdf.multi_cell(
+                                                    w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
+
+                                                pdf.set_fill_color(193, 153, 9)
+                                                pdf.set_xy(8, 275)
+                                                pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
+
+                                                pdf.set_text_color(45, 82, 158)
+                                                pdf.set_font("times", size=14, style="B")
+                                                pdf.set_xy(8, 280)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="JADARA Foundation")
+
+                                                pdf.set_text_color(193, 153, 9)
+                                                pdf.set_font("times", size=7.5, style="")
+                                                pdf.set_xy(8, 285)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                                                pdf.set_text_color(0, 0, 0)
+                                                pdf.set_font("times", size=7.5, style="")
+                                                pdf.set_xy(8, 289)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                                                pdf.set_font("times", size=8, style="")
+                                                pdf.set_xy(107, 279)
+                                                pdf.multi_cell(
+                                                    w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                                                pdf.set_font("times", size=8, style="")
+                                                pdf.set_xy(158, 283)
+                                                pdf.multi_cell(
+                                                    w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                                                pdf.set_xy(152, 275)
+                                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                                pdf.set_xy(102, 275)
+                                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                                e808.delete(0, END)
+                                                e801.delete(0, END)
+                                                e802.delete(0, END)
+                                                e803.delete(0, END)
+                                                e804.delete(0, END)
+                                                e805.delete(0, END)
+                                                topattp.destroy()
+
+                                                nom_fichier_pdf = os.path.join(
+                                                    nom_dossier, str(D_22_09_10) + ".pdf")
+                                                pdf.output(nom_fichier_pdf)
+                                            topattp = Toplevel()
+                                            topattp.title(D_22_09_10)
+                                            topattp.geometry("500x360")
+                                            topattp.resizable(width=0, height=0)
+                                            icon = PhotoImage(file='logo-light.png')
+                                            window.tk.call('wm', 'iconphoto', topattp._w, icon)
+                                            l800 = Label(topattp, text=Type+" ("+Montant+" DH) de "+Nom,
+                                                        font=('Times', 11, 'bold'))
+                                            l800.place(x=50, y=25)
+                                            l808 = Label(topattp, text="De la part de : ",
+                                                        font=('Times', 11, 'bold'))
+                                            e808 = Entry(
+                                                topattp,  width=25)
+                                            l808.place(x=50, y=72)
+                                            e808.place(x=200, y=70)
+                                            l802 = Label(topattp, text="Exercice : ",
+                                                        font=('Times', 11, 'bold'))
+                                            e802 = Entry(
+                                                topattp,  width=25)
+                                            l802.place(x=50, y=112)
+                                            e802.place(x=200, y=110)
+                                            l801 = Label(topattp, text="Année scolaire : ",
+                                                        font=('Times', 11, 'bold'))
+                                            e801 = Entry(
+                                                topattp,  width=25)
+                                            l801.place(x=50, y=152)
+                                            e801.place(x=200, y=150)
+                                            l803 = Label(topattp, text="Nom étudiant : ",
+                                                        font=('Times', 11, 'bold'))
+                                            e803 = Entry(
+                                                topattp,  width=25)
+                                            l803.place(x=50, y=192)
+                                            e803.place(x=200, y=190)
+                                            l804 = Label(topattp, text="CIN étudiant : ",
+                                                        font=('Times', 11, 'bold'))
+                                            e804 = Entry(
+                                                topattp,  width=25)
+                                            l804.place(x=50, y=232)
+                                            e804.place(x=200, y=230)
+                                            l805 = Label(topattp, text="Etudiant en : ",
+                                                        font=('Times', 11, 'bold'))
+                                            e805 = Entry(
+                                                topattp,  width=25)
+                                            l805.place(x=50, y=272)
+                                            e805.place(x=200, y=270)
+                                            def hantaTchoufattp():
+                                                e808.delete(0, END)
+                                                e801.delete(0, END)
+                                                e802.delete(0, END)
+                                                e803.delete(0, END)
+                                                e804.delete(0, END)
+                                                e805.delete(0, END)
+                                                topattp.destroy()
+                                            submitbuttonattp = Button(
+                                                topattp, text='Enregistrer', command=lambda: swbattp())
+                                            submitbuttonattp.configure(
+                                                font=('Times', 11, 'bold'), bg='green', fg='white')
+                                            submitbuttonattp.place(x=300, y=320)
+                                            cancelbuttonattp = Button(
+                                                topattp, text='Annulé', command=lambda: hantaTchoufattp())
+                                            cancelbuttonattp.configure(
+                                                font=('Times', 11, 'bold'), bg='red', fg='white')
+                                            cancelbuttonattp.place(x=200, y=320)
+                                            topattp.protocol(
+                                                "WM_DELETE_WINDOW", hantaTchoufattp)
+                                            topattp.bind(
+                                                "<Return>", lambda e: swbattp())
+                                            topattp.bind(
+                                                "<Escape>", lambda e: hantaTchoufattp())
+                                            topattp.wait_window()
+                                        if D_22_09_10[0] == "C":
+                                            def swbattc() : 
+                                                pdf.set_xy(90, 65)
+                                                pdf.set_font("times", size=21, style='BU')
+                                                pdf.cell(txt='Attestation de Cotisation',
+                                                        w=30, align='C')
+                                                pdf.image('logo-att.png', 80, 10, w=50, h=40)
+                                                pdf.set_xy(91.5, 75)
+                                                pdf.cell(txt=D_22_09_10, w=28, align='C')
+                                                text1 = "Nous, JADARA FOUNDATION, attestons par la présente avoir reçu la somme de "
+                                                text2 = "**"+Montant + \
+                                                    " dirhams ("+Montant_en_lettre+" dirhams) "+"**"
+                                                text5 = "de "
+                                                text6 ="**"+Nom+" "+"**"
+                                                text7 = labelc.cget('text')
+                                                text8 = "**"+" "+e908.get()+"**"+"."
+                                                text13 = "Cette attestation est délivrée pour servir et valoir ce que de droit."
+
+                                                text22 = "Fait à Casablanca, le "
+                                                text23 = Fait_le[0:2]+" "+mois + \
+                                                    " "+"20"+Fait_le[6:len(Fait_le)]
+
+                                                pdf.set_auto_page_break("ON", margin=0.0)
+                                                pdf.set_font("times", size=13)
+                                                pdf.set_xy(20, 120)
+                                                pdf.multi_cell(w=170, h=5, txt=text1+text2+text5+text6+text7+text8+"\n\n"+text13, markdown=True,
+                                                            align='L')
+
+                                                pdf.set_font("times", size=11)
+                                                pdf.set_xy(100, 200)
+                                                pdf.multi_cell(w=90, h=5, txt=text22+"**"+text23+"**", markdown=True, align='R')
+                                                pdf.set_xy(100, 210)
+                                                pdf.multi_cell(
+                                                    w=90, h=5, txt="**Bochra CHABBOUBA ELIDRISSI**", markdown=True, align='R')
+                                                pdf.set_xy(100, 215)
+                                                pdf.multi_cell(
+                                                    w=90, h=5, txt="**Responsable Administrative et Financière**", markdown=True, align='R')
+
+                                                pdf.set_fill_color(193, 153, 9)
+                                                pdf.set_xy(8, 275)
+                                                pdf.multi_cell(w=0, h=0.5, txt="", fill=True)
+
+                                                pdf.set_text_color(45, 82, 158)
+                                                pdf.set_font("times", size=14, style="B")
+                                                pdf.set_xy(8, 280)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="JADARA Foundation")
+
+                                                pdf.set_text_color(193, 153, 9)
+                                                pdf.set_font("times", size=7.5, style="")
+                                                pdf.set_xy(8, 285)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="Jadara Foundation, association reconnue d'utilité publique selon de décret N°2.22.834")
+
+                                                pdf.set_text_color(0, 0, 0)
+                                                pdf.set_font("times", size=7.5, style="")
+                                                pdf.set_xy(8, 289)
+                                                pdf.multi_cell(
+                                                    w=0, h=5, txt="**Adresse**: 295, Bd Abdelmoumen C24, angle Rue la Percée, 20100, Casablanca", markdown=True)
+
+                                                pdf.set_font("times", size=8, style="")
+                                                pdf.set_xy(107, 279)
+                                                pdf.multi_cell(
+                                                    w=40, h=5, txt="**T**: +212 522 861 880\n**F**: +212 522 864 178\n**Mail**: contact@jadara.foundation", markdown=True)
+
+                                                pdf.set_font("times", size=8, style="")
+                                                pdf.set_xy(158, 283)
+                                                pdf.multi_cell(
+                                                    w=40, h=5, txt="**www.jadara.foundation**", markdown=True)
+
+                                                pdf.set_xy(152, 275)
+                                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+
+                                                pdf.set_xy(102, 275)
+                                                pdf.multi_cell(w=0.5, h=20, txt="", fill=True)
+                                                
+                                                e908.delete(0, END)
+                                                topattc.destroy()
+                                                nom_fichier_pdf = os.path.join(
+                                                    nom_dossier, str(D_22_09_10) + ".pdf")
+
+                                                pdf.output(nom_fichier_pdf)
+
+                                            topattc = Toplevel()
+                                            topattc.title(D_22_09_10)
+                                            topattc.geometry("500x220")
+                                            topattc.resizable(width=0, height=0)
+                                            icon = PhotoImage(file='logo-light.png')
+                                            window.tk.call('wm', 'iconphoto', topattc._w, icon)
+                                            l900 = Label(topattc, text=Type+" ("+Montant+" DH) de "+Nom,
+                                                        font=('Times', 11, 'bold'))
+                                            l900.place(x=50, y=25)
+                                            def update_label():
+                                                if var.get() == 1:
+                                                    labelc.config(text="en tant que membre de l'association au titre de l'année")
+                                                else:
+                                                    labelc.config(text="en tant que membre de l'association au titre des années :")
+
+                                            var = IntVar()
+                                            var.set(1)  # Coche le premier checkbutton par défaut
+
+                                            checkbuttonc1 = Checkbutton(topattc, text="Une année", variable=var, onvalue=1, offvalue=0, command=update_label)
+                                            checkbuttonc1.place(x=90, y=60)
+
+                                            checkbuttonc2 = Checkbutton(topattc, text="Plusieurs années", variable=var, onvalue=0, offvalue=1, command=update_label)
+                                            checkbuttonc2.place(x=240, y=60)
+
+                                            labelc = Label(topattc, text="en tant que membre de l'association au titre de l'année")
+                                            labelc.place(x=50, y=90)
+
+                                            e908 = Entry(topattc, width=25)
+                                            e908.pack()
+                                            e908.place(x=150, y=120)
+                                            def hantaTchoufattc():
+                                                e908.delete(0, END)
+                                                topattc.destroy()
+                                            submitbuttonattc = Button(
+                                                topattc, text='Enregistrer', command=lambda: swbattc())
+                                            submitbuttonattc.configure(
+                                                font=('Times', 11, 'bold'), bg='green', fg='white')
+                                            submitbuttonattc.place(x=250, y=170)
+                                            cancelbuttonattc = Button(
+                                                topattc, text='Annulé', command=lambda: hantaTchoufattc())
+                                            cancelbuttonattc.configure(
+                                                font=('Times', 11, 'bold'), bg='red', fg='white')
+                                            cancelbuttonattc.place(x=150, y=170)
+                                            topattc.protocol(
+                                                "WM_DELETE_WINDOW", hantaTchoufattc)
+                                            topattc.bind(
+                                                "<Return>", lambda e: swbattc())
+                                            topattc.bind(
+                                                "<Escape>", lambda e: hantaTchoufattc())
+                                            topattc.wait_window()
+                                        laDate = x
+                                        citrop = 1
 
                                         try:
                                             if Dattta[j][3] == ' ':
@@ -4231,7 +8079,7 @@ def acceuil():
                                             donothing = 0
                                         l9it = 1
                                 j += 1
-                    if citrop==1:
+                    if citrop == 1:
                         messagebox.showinfo(
                             title='', message="Fichier(s) enregistré(s).", parent=window)
                     return
@@ -4248,7 +8096,7 @@ def acceuil():
                 idinput = Button(frame5, text='•', command=idin)
                 idinput.place(x=3, y=162)
                 selall1 = Button(frame5, text='}', command=selectibabahom)
-                selall1.place(x=2, y=295)
+                selall1.place(x=2, y=296)
 
                 télécharger = Button(
                     frame1, text='Télécharger xlsx', command=lambda: telechCSV(my_tree))
@@ -4256,7 +8104,13 @@ def acceuil():
                 lo8 = Label(frame1, text='Ctrl-X', fg='white',
                             background='black', font=('Times', 10))
                 lo8.pack()
+                télécharger_dossier_complet = Button(
+                    frame1, text='Dossier complet', command=lambda: telechDossCom(my_tree))
+                télécharger_dossier_complet.pack(pady=40)
 
+                lodo = Label(frame1, text='Ctrl-D', fg='white',
+                             background='black', font=('Times', 10))
+                lodo.pack()
                 rechercher = Button(frame3, text='Rechercher',
                                     command=lambda: menuRecherch())
                 delete = Button(frame3, text='Supprimer',
@@ -4265,11 +8119,190 @@ def acceuil():
                              command=lambda: addData(my_tree))
                 edite = Button(frame3, text='Modifier',
                                command=lambda: editData(my_tree))
+                AttTypeD = Button(window, text='D',
+                                  command=lambda: editTypeAttD(my_tree))
+                AttTypeS = Button(window, text='S',background='yellow',
+                                  command=lambda: editTypeAttS(my_tree))
+                AttTypeP = Button(window, text='P',background='orange',
+                                  command=lambda: editTypeAttP(my_tree))
+                AttTypeC = Button(window, text='C',background='brown',
+                                  command=lambda: editTypeAttC(my_tree))
+                organise = Button(window, text='O',background='black',foreground='white',
+                                  command=lambda: organiser(my_tree))
+                def Mmee(tree) :
+                    global ope
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][3].startswith('MLLE '):
+                                                Dattta[j][3] = 'MME ' + Dattta[j][3][5:]
+                                            elif Dattta[j][3].startswith('MR '):
+                                                Dattta[j][3] = 'MME ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('DR '):
+                                                Dattta[j][3] = 'MME ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('MME '):
+                                                Dattta[j][3] = 'MME ' + Dattta[j][3][4:]
+                                            elif Dattta[j][3].startswith('M '):
+                                                Dattta[j][3] = 'MME ' + Dattta[j][3][2:]
+                                            else :
+                                                Dattta[j][3] = 'MME ' + Dattta[j][3]
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
+
+
+                def Mllee(tree) :
+                    global ope
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][3].startswith('MLLE '):
+                                                Dattta[j][3] = 'MLLE ' + Dattta[j][3][5:]
+                                            elif Dattta[j][3].startswith('MR '):
+                                                Dattta[j][3] = 'MLLE ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('DR '):
+                                                Dattta[j][3] = 'MLLE ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('MME '):
+                                                Dattta[j][3] = 'MLLE ' + Dattta[j][3][4:]
+                                            elif Dattta[j][3].startswith('M '):
+                                                Dattta[j][3] = 'MLLE ' + Dattta[j][3][2:]
+                                            else :
+                                                Dattta[j][3] = 'MLLE ' + Dattta[j][3]
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
+
+                def Mrr(tree) :
+                    global ope
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][3].startswith('MLLE '):
+                                                Dattta[j][3] = 'MR ' + Dattta[j][3][5:]
+                                            elif Dattta[j][3].startswith('MR '):
+                                                Dattta[j][3] = 'MR ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('DR '):
+                                                Dattta[j][3] = 'MR ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('MME '):
+                                                Dattta[j][3] = 'MR ' + Dattta[j][3][4:]
+                                            elif Dattta[j][3].startswith('M '):
+                                                Dattta[j][3] = 'MR ' + Dattta[j][3][2:]
+                                            else :
+                                                Dattta[j][3] = 'MR ' + Dattta[j][3]
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
+
+                def Drr(tree) :
+                    global ope
+                    global Dattta
+                    global changerowcolo
+                    global kn9lb3la
+                    global reloulo
+                    global bach
+                    if ope == 0:
+                        ope = 1
+                        if len(tree.selection()) > 0:
+                            lololo = tree.selection()
+                            for i in lololo:
+                                j = 0
+                                l9it = 0
+                                for y in Dattta:
+                                    if l9it == 1:
+                                        break
+                                    if l9it == 0:
+                                        if tree.selection()[tree.selection().index(i)].split()[0] == y[7] or y[7] == tree.selection()[tree.selection().index(i)].split()[len(tree.selection()[tree.selection().index(i)].split())-1]:
+                                            if Dattta[j][3].startswith('MLLE '):
+                                                Dattta[j][3] = 'DR ' + Dattta[j][3][5:]
+                                            elif Dattta[j][3].startswith('MR '):
+                                                Dattta[j][3] = 'DR ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('DR '):
+                                                Dattta[j][3] = 'DR ' + Dattta[j][3][3:]
+                                            elif Dattta[j][3].startswith('MME '):
+                                                Dattta[j][3] = 'DR ' + Dattta[j][3][4:]
+                                            elif Dattta[j][3].startswith('M '):
+                                                Dattta[j][3] = 'DR ' + Dattta[j][3][2:]
+                                            else :
+                                                Dattta[j][3] = 'DR ' + Dattta[j][3]
+                                            l9it = 1
+                                    j += 1
+                            stflhzak(tree)
+                        else:
+                            messagebox.showinfo(
+                                title='!!', message='Merci de selectionner la (les) ligne(s) à modifier')
+                        ope = 0
+                    
+                Mme = Button(window, text='Mme',
+                                  command=lambda: Mmee(my_tree))
+                Mlle = Button(window, text='Mlle',
+                                  command=lambda: Mllee(my_tree))
+                Mr = Button(window, text='Mr',
+                                  command=lambda: Mrr(my_tree))
+                Dr = Button(window, text='Dr',
+                                  command=lambda: Drr(my_tree))
                 Attestation = Button(
                     frame3, text='  Attestation(s)', command=lambda: att(my_tree))
 
                 window.bind('<Control-k>', lambda *args: selectibabahom())
                 window.bind('<Control-K>', lambda *args: selectibabahom())
+                window.bind('<Control-D>', lambda e: telechDossCom(my_tree))
+                window.bind('<Control-d>', lambda e: telechDossCom(my_tree))
+                window.bind('<Control-O>', lambda e: organiser(my_tree))
+                window.bind('<Control-o>', lambda e: organiser(my_tree))
                 window.bind("<Control-s>", lambda e: deleteData(my_tree))
                 window.bind("<Control-f>", lambda e: menuRecherch())
                 window.bind("<Control-F>", lambda e: menuRecherch())
@@ -4307,6 +8340,16 @@ def acceuil():
                 lo4 = Label(frame3, text='Ctrl-M', fg='white',
                             background='black', font=('Times', 10))
                 lo4.pack()
+                AttTypeD.place(x=1525, y=10)
+                AttTypeS.place(x=1560, y=10)
+                AttTypeP.place(x=1595, y=10)
+                AttTypeC.place(x=1630, y=10)
+                organise.place(x=1660, y = 50)
+                Dr.place(x=545,y=10)
+                Mme.place(x=600, y=10)
+                Mlle.place(x=670, y=10)
+                Mr.place(x=740, y=10)
+
                 Attestation.pack(pady=20, padx=20)
                 lo5 = Label(frame3, text='Ctrl-T', fg='white',
                             background='black', font=('Times', 10))
@@ -4316,25 +8359,19 @@ def acceuil():
 
         frame1.pack(fill='y', pady=10, padx=10, side='right')
         frame2.pack(fill='both', side='left', expand=True, padx=10, pady=10)
-        charger = Button(frame1, text='Charger les données',
-                         command=traitement)
-        charger.pack(pady=20)
-        lo20 = Label(frame1, text='Entrée', fg='white',
-                     background='black', font=('Times', 10))
-        lo20.pack()
-        init = Button(frame1, text='Rénitialiser les données', command=reset)
+        init = Button(frame1, text="Relancer l'application", command=reset)
         lo12 = Label(frame1, text='Ctrl-R', fg='white',
                      background='black', font=('Times', 10))
         lo12.pack(side='bottom')
         init.pack(side='bottom', pady=20, padx=5)
-        l = Label(frame2, text=os.path.basename(filename))
+        l = Label(frame2, text=os.path.basename(RBUmnia))
         l.pack(pady=5, padx=5)
         window.bind("<Return>", lambda e: traitement())
         window.bind("<Control-r>", lambda e: reset())
         window.bind("<Control-R>", lambda e: reset())
 
-    b = Button(text="Attestation", command=lambda: secondaire())
-    a = Button(text="Excel", command=lambda: principal())
+    b = Button(text="Créer attestation", command=lambda: secondaire())
+    a = Button(text="Charger relevé bancaire PDF", command=lambda: principal())
     window.bind("<Control-T>", lambda e: secondaire())
     window.bind("<Control-t>", lambda e: secondaire())
     a.place(relx=0.5, rely=0.3, anchor=CENTER)
